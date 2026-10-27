@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "ch.bissabi.bissabicrmpro",
+      "bundleIdentifier": "com.vibecode.bissabicrmpro-h7qq2g",
       "buildNumber": "1",
       "config": {
         "usesNonExemptEncryption": false
