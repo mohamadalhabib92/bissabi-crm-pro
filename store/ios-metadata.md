@@ -6,7 +6,7 @@
 |---|---|
 | Nom (≤ 30) | Bissabi CRM Pro (15 car.) |
 | Sous-titre (≤ 30) | CRM, offres et QR-factures (26 car.) |
-| Bundle ID | `ch.bissabi.bissabicrmpro` |
+| Bundle ID | `com.vibecode.bissabicrmpro-h7qq2g` |
 | SKU proposé | `bissabi-crm-pro-ios-001` |
 | Projet EAS | `dcf8624c-52fa-4862-8f7a-10858db2056d` (compte habib548) |
 | Version / build | 1.0.0 / numéro de build géré par EAS (remote, autoIncrement) |
