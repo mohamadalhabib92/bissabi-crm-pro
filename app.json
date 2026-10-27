@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "Bissabi CRM Pro",
+    "slug": "bissabi-crm-pro",
+    "scheme": "bissabicrmpro",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "description": "Bissabi CRM Pro — clients, offres, factures QR suisses, TVA Oui/Non, pipeline HORECA.",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F7F6F2"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "ch.bissabi.bissabicrmpro"
+    },
+    "android": {
+      "package": "ch.bissabi.bissabicrmpro",
+      "adaptiveIcon": {
+        "backgroundColor": "#1A4D2E",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "output": "single",
+      "bundler": "metro",
+      "name": "Bissabi CRM Pro",
+      "shortName": "CRM Pro",
+      "themeColor": "#1A4D2E",
+      "backgroundColor": "#F7F6F2",
+      "lang": "fr"
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "experiments": {
+      "baseUrl": "/bissabi-crm-pro"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+node_modules/
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+.metro-health-check*
+*.tsbuildinfo
+npm-debug.*
+.DS_Store
+*.jks
+*.p8
+*.p12
+*.key
+*.pem
+*.mobileprovision
+/ios
+/android
+# secrets : ne jamais committer .env (seul .env.example est versionné)
+.env
+.env.*
+!.env.example

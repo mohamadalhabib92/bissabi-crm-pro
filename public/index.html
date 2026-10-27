@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Bissabi CRM Pro</title>
+    <meta name="description" content="Bissabi CRM Pro — clients, offres, factures QR suisses, TVA Oui/Non, pipeline HORECA." />
+    <meta name="theme-color" content="#1A4D2E" />
+    <link rel="manifest" href="/bissabi-crm-pro/manifest.json" />
+    <link rel="apple-touch-icon" href="/bissabi-crm-pro/icons/apple-touch-icon.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="CRM Pro" />
+    <style id="expo-reset">
+      html, body { height: 100%; background: #F7F6F2; }
+      body { overflow: hidden; -webkit-tap-highlight-color: transparent; }
+      #root { display: flex; height: 100%; flex: 1; }
+    </style>
+  </head>
+  <body>
+    <noscript>Activez JavaScript pour utiliser Bissabi CRM Pro.</noscript>
+    <div id="root"></div>
+    <script>
+      if ('serviceWorker' in navigator && location.hostname !== 'localhost') {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('/bissabi-crm-pro/sw.js', { scope: '/bissabi-crm-pro/' }).catch(function (e) { console.warn('SW', e); });
+        });
+      }
+    </script>
+  </body>
+</html>
