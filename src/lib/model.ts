@@ -47,6 +47,8 @@ export type Account = {
   source: string;
   createdAt: string;
   demo?: boolean;
+  /** Clé externe stable (import Bissabi) : garantit l’idempotence, jamais modifiée par l’utilisateur. */
+  ext?: string;
 };
 
 export type Line = { id: string; description: string; qty: number; unitPrice: number };
@@ -66,7 +68,7 @@ export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'cancelled';
 export const INVOICE_STATUS: Record<InvoiceStatus, string> = { draft: 'Brouillon', sent: 'Envoyée', paid: 'Payée', cancelled: 'Annulée' };
 export type Invoice = {
   id: string; number: string; accountId: string; date: string; dueDate: string; lines: Line[]; vat: Vat;
-  status: InvoiceStatus; paidAt?: string; offerId?: string; notes: string; demo?: boolean;
+  status: InvoiceStatus; paidAt?: string; offerId?: string; notes: string; demo?: boolean; ext?: string; source?: string;
 };
 
 export const EXPENSE_CATEGORIES = [
@@ -76,7 +78,12 @@ export const EXPENSE_CATEGORIES = [
 export type Attachment = { name: string; uri: string; mime?: string; persisted: boolean };
 export type Expense = {
   id: string; date: string; category: string; supplier: string; description: string; amountTTC: number; vatAmount: number;
-  attachment?: Attachment; demo?: boolean;
+  attachment?: Attachment; demo?: boolean; ext?: string; source?: string;
+};
+
+export type Product = {
+  id: string; ref: string; nom: string; description: string; format: string; prix: number; unite: string; canal: string;
+  tvaTaux: number; source: string; ext?: string;
 };
 
 export type Company = {

@@ -13,13 +13,15 @@ import { downloadText } from '@/lib/download';
 import { todayISO } from '@/lib/format';
 import { Button, Card, Field, H2, ListItem, Muted, Notice, Row, Screen, Segmented, Spacer, Toggle } from '@/ui/kit';
 import { theme as t } from '@/ui/theme';
+import { BissabiImportButton } from '@/ui/BissabiImport';
+import { chf } from '@/lib/format';
 
 const LANGS: { label: string; value: Company['lang'] }[] = [
   { label: 'FR', value: 'fr' }, { label: 'DE', value: 'de' }, { label: 'IT', value: 'it' }, { label: 'EN', value: 'en' },
 ];
 
 export default function Settings() {
-  const { company, setCompany, hasDemo, removeDemo } = useData();
+  const { company, setCompany, hasDemo, removeDemo, products } = useData();
   const router = useRouter();
   const [c, setC] = useState<Company>(company);
   const [saved, setSaved] = useState(false);
@@ -68,6 +70,24 @@ export default function Settings() {
       <Muted style={{ fontSize: 12 }}>FR complet. DE / IT / EN : navigation traduite, écrans et documents encore en français.</Muted>
       <Spacer />
       <Button title={saved ? 'Enregistré ✓' : 'Enregistrer'} icon="checkmark" onPress={() => { setCompany(c); setSaved(true); }} />
+
+      <Spacer h={24} />
+      <H2>Données Bissabi</H2>
+      <Card>
+        <BissabiImportButton onCompany={(co) => setC((x) => {
+          const keep = Object.fromEntries(Object.entries(x).filter(([k, v]) => String(v ?? '').trim() !== '' && !(k === 'iban' && isPlaceholderIban(String(v)))));
+          return { ...co, ...keep } as Company;
+        })} />
+      </Card>
+      {products.length ? (
+        <>
+          <Spacer h={12} />
+          <H2>Catalogue produits</H2>
+          <Card>
+            {products.map((p) => <ListItem key={p.id} icon="pricetag-outline" title={`${p.nom} — ${chf(p.prix)}`} subtitle={`${p.ref} · ${p.format} · ${p.canal}`} />)}
+          </Card>
+        </>
+      ) : null}
 
       <Spacer h={24} />
       <H2>Données</H2>

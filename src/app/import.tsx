@@ -8,6 +8,7 @@ import { downloadText, toCSV } from '@/lib/download';
 import { uid } from '@/lib/storage';
 import { Button, Card, Field, H2, Muted, Notice, Row, Screen, Spacer } from '@/ui/kit';
 import { theme as t } from '@/ui/theme';
+import { BissabiImportButton } from '@/ui/BissabiImport';
 
 export default function ImportScreen() {
   const { accounts, setAccounts } = useData();
@@ -34,6 +35,11 @@ export default function ImportScreen() {
 
   return (
     <Screen>
+      <H2>Import complet Bissabi</H2>
+      <Card style={{ marginBottom: 16 }}>
+        <BissabiImportButton />
+      </Card>
+      <H2>Import de comptes (CSV)</H2>
       <Muted>Séparateur « ; », première ligne = en-têtes exacts :</Muted>
       <Card style={{ marginVertical: 8 }}>
         <Text selectable style={{ color: t.text, fontFamily: 'monospace', fontSize: 12 }}>{ACCOUNT_HEADERS.join(';')}</Text>

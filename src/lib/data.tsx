@@ -1,6 +1,6 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import { usePersistentState, uid } from './storage';
-import { DEFAULT_COMPANY, type Account, type Company, type Expense, type Invoice, type Offer } from './model';
+import { DEFAULT_COMPANY, type Account, type Company, type Expense, type Invoice, type Offer, type Product } from './model';
 import { SEED_ACCOUNTS, SEED_EXPENSES, SEED_INVOICES, SEED_OFFERS } from './seed';
 import { addDays, todayISO } from './format';
 
@@ -12,6 +12,7 @@ type Ctx = {
   invoices: Invoice[]; setInvoices: Setter<Invoice[]>;
   expenses: Expense[]; setExpenses: Setter<Expense[]>;
   company: Company; setCompany: Setter<Company>;
+  products: Product[]; setProducts: Setter<Product[]>;
   nextNumber: (kind: 'OF' | 'FA') => string;
   convertOfferToInvoice: (offer: Offer) => string;
   removeDemo: () => void;
@@ -25,6 +26,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [invoices, setInvoices, r3] = usePersistentState<Invoice[]>('invoices', SEED_INVOICES);
   const [expenses, setExpenses, r4] = usePersistentState<Expense[]>('expenses', SEED_EXPENSES);
   const [company, setCompany, r5] = usePersistentState<Company>('company', DEFAULT_COMPANY);
+  const [products, setProducts, r7] = usePersistentState<Product[]>('products', []);
   const [counters, setCounters, r6] = usePersistentState<Record<string, number>>('counters', {});
 
   const nextNumber = (kind: 'OF' | 'FA') => {
@@ -61,9 +63,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   return (
     <C.Provider
       value={{
-        ready: r1 && r2 && r3 && r4 && r5 && r6,
+        ready: r1 && r2 && r3 && r4 && r5 && r6 && r7,
         accounts, setAccounts, offers, setOffers, invoices, setInvoices, expenses, setExpenses,
-        company: { ...DEFAULT_COMPANY, ...company }, setCompany, nextNumber, convertOfferToInvoice, removeDemo, hasDemo,
+        company: { ...DEFAULT_COMPANY, ...company }, setCompany, products, setProducts, nextNumber, convertOfferToInvoice, removeDemo, hasDemo,
       }}
     >
       {children}
