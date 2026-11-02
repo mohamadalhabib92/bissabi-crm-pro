@@ -4,7 +4,7 @@ import Svg, { G, Path, Rect } from 'react-native-svg';
 import { qrPath } from '@/lib/qrbill';
 import { theme as t } from '@/ui/theme';
 
-/** Aperçu écran du QR suisse (croix suisse centrale). Taille ≈ 3,5 cm sur le PDF. */
+/** Aperçu écran (plus petit que l'impression). Sur le PDF le symbole fait 46×46 mm. */
 export function QrPreview({ payload, specimen, size = 160 }: { payload: string; specimen?: boolean; size?: number }) {
   const q = useMemo(() => qrPath(payload), [payload]);
   const n = q.size;
@@ -25,7 +25,7 @@ export function QrPreview({ payload, specimen, size = 160 }: { payload: string; 
       </Svg>
       {specimen ? (
         <View style={{ position: 'absolute', left: -10, right: -10, top: size / 2 - 14, backgroundColor: t.accent, transform: [{ rotate: '-30deg' }], paddingVertical: 4 }}>
-          <Text style={{ color: '#fff', fontWeight: '800', textAlign: 'center', letterSpacing: 2 }}>SPÉCIMEN</Text>
+          <Text style={{ color: t.text, fontWeight: '800', textAlign: 'center', letterSpacing: 2 }}>SPÉCIMEN</Text>
         </View>
       ) : null}
     </View>

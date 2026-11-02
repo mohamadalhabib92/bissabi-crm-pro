@@ -4,13 +4,16 @@ import { Text } from 'react-native';
 import { useData } from '@/lib/data';
 import { downloadText } from '@/lib/download';
 import { chf, dateCH, todayISO } from '@/lib/format';
-import { INVOICE_STATUS, OFFER_STATUS, totals, type InvoiceStatus, type OfferStatus } from '@/lib/model';
+import { displayStatus } from '@/lib/invoices';
+import { OFFER_STATUS, totals, type InvoiceStatus, type OfferStatus } from '@/lib/model';
 import { vatCSV } from '@/lib/vatExport';
 import { Badge, Button, Card, Divider, Empty, ListItem, Row, Screen, Segmented, Spacer } from '@/ui/kit';
 import { theme as t } from '@/ui/theme';
 
 const OT: Record<OfferStatus, 'neutral' | 'info' | 'success' | 'danger'> = { draft: 'neutral', sent: 'info', accepted: 'success', refused: 'danger', converted: 'success' };
-const IT: Record<InvoiceStatus, 'neutral' | 'info' | 'success' | 'danger'> = { draft: 'neutral', sent: 'info', paid: 'success', cancelled: 'danger' };
+const IT: Record<InvoiceStatus, 'neutral' | 'info' | 'success' | 'danger' | 'warning'> = {
+  draft: 'neutral', issued: 'info', sent: 'info', partial: 'warning', paid: 'success', cancelled: 'danger',
+};
 
 export default function Sales() {
   const { offers, invoices, accounts } = useData();
@@ -50,9 +53,9 @@ export default function Sales() {
             <Frag key={inv.id}>
               {i ? <Divider /> : null}
               <ListItem
-                title={`${inv.number} · ${name(inv.accountId)}`}
-                subtitle={`${dateCH(inv.date)} · ${chf(totals(inv.lines, inv.vat).ttc)} · ${inv.vat.apply ? `TVA ${inv.vat.rate} %` : 'TVA non applicable'}${inv.demo ? ' · démo' : ''}`}
-                right={<Badge label={inv.status === 'sent' && inv.dueDate < todayISO() ? 'En retard' : INVOICE_STATUS[inv.status]} tone={inv.status === 'sent' && inv.dueDate < todayISO() ? 'danger' : IT[inv.status]} />}
+                title={`${inv.kind === 'credit' ? 'Avoir' : 'Facture'} ${inv.number || 'brouillon'} · ${name(inv.accountId)}`}
+                subtitle={`${dateCH(inv.date)} · ${chf((inv.kind === 'credit' ? -1 : 1) * totals(inv.lines, inv.vat).ttc)} · ${inv.vat.apply ? `TVA ${inv.vat.rate} %` : 'TVA non applicable'}${inv.demo ? ' · démo' : ''}`}
+                right={<Badge label={displayStatus(inv)} tone={(inv.status === 'sent' || inv.status === 'issued') && inv.kind !== 'credit' && inv.dueDate < todayISO() ? 'danger' : IT[inv.status]} />}
                 onPress={() => router.push({ pathname: '/invoice/[id]', params: { id: inv.id } })}
               />
             </Frag>
@@ -62,7 +65,7 @@ export default function Sales() {
         <Empty icon="receipt-outline" title="Aucune facture" />
       )}
       <Spacer />
-      <Text style={{ color: t.muted, fontSize: 12 }}>Numérotation automatique OF-AAAA-NNN / FA-AAAA-NNN.</Text>
+      <Text style={{ color: t.muted, fontSize: 12 }}>Les numéros déjà émis sont conservés. Les suivants continuent après le dernier (FA-AAAA-NNNN, avoirs AV-AAAA-NNNN).</Text>
     </Screen>
   );
 }

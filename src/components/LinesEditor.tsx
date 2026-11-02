@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Text, TextInput, View } from 'react-native';
 import { chf, parseAmount } from '@/lib/format';
 import { totals, VAT_RATES, type Line, type Vat } from '@/lib/model';
@@ -50,10 +50,11 @@ export function LinesEditor({ lines, onLines, vat, onVat, editable = true }: { l
 /** Saisie numérique tolérante (virgule, apostrophes) avec texte local. */
 export function AmountInput({ value, onChange, label, width, editable = true }: { value: number; onChange: (n: number) => void; label: string; width?: number; editable?: boolean }) {
   const [txt, setTxt] = useState(String(value));
-  useEffect(() => {
+  const [source, setSource] = useState(value);
+  if (value !== source) {
+    setSource(value);
     if (parseAmount(txt) !== value) setTxt(String(value));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
+  }
   return (
     <TextInput
       editable={editable}
