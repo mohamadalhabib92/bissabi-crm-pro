@@ -17,7 +17,7 @@ import {
 } from './migrate';
 import { DEFAULT_COMPANY, coerceInvoiceStatus, isDemo, type Account, type Company, type CreditNote, type Expense, type Invoice, type Offer, type Product } from './model';
 import { nextSerial } from './numbering';
-import { commitIfHydrated, continueOffline, markStorageHydrated, storageHydrated } from './persistGate';
+import { commitIfHydrated, continueOffline, markStorageHydrated, planDiskWrites, recordWriteOutcome, storageHydrated } from './persistGate';
 import { asyncStorageKv } from './storage';
 import { uid } from './uid';
 import type { AuditEvent } from './audit';
@@ -80,26 +80,40 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [tick, setTick] = useState(0);
   const ref = useRef<Store | null>(null);
   const disk = useRef<Store | null>(null);
-  const persisted = useRef(true);
+  const confirmed = useRef<Partial<Record<StoreKey, string>>>({});
+  const pending = useRef<Set<StoreKey>>(new Set());
   const queue = useRef(Promise.resolve());
+  const WRITE_FAILED = 'L’enregistrement a échoué. Les changements restent à l’écran mais ne sont pas tous sur l’appareil. Libérez de l’espace, puis modifiez à nouveau pour réessayer.';
 
   const flush = useCallback((next: Store) => {
     // Avant une lecture réussie, y compris au premier rendu : aucune écriture.
     if (!storageHydrated()) return;
-    const prev = disk.current;
-    const keys: StoreKey[] = persisted.current && prev ? diffKeys(prev, next) : [...STORE_KEYS];
-    persisted.current = true;
-    disk.current = next;
-    if (!keys.length) return;
-    const entries = keys.map((key) => ({ key, value: JSON.stringify(next[key]) }));
+    const entries = planDiskWrites(confirmed.current, pending.current, next);
+    if (!entries.length) {
+      if (pending.current.size === 0) setWriteError(null);
+      return;
+    }
     const kv = asyncStorageKv();
     queue.current = queue.current.then(async () => {
-      try {
-        const wrote = await commitIfHydrated(kv, entries);
-        if (wrote) setWriteError(null);
-      } catch {
-        setWriteError('L’enregistrement a échoué. Les changements restent à l’écran mais ne sont pas tous sur l’appareil. Libérez de l’espace, puis modifiez à nouveau pour réessayer.');
+      const latest = ref.current;
+      if (!latest || !storageHydrated()) return;
+      const planned = planDiskWrites(confirmed.current, pending.current, latest);
+      for (const entry of planned) {
+        const fresh = JSON.stringify(latest[entry.key]);
+        const attempt = { key: entry.key, value: fresh };
+        try {
+          const wrote = await commitIfHydrated(kv, [attempt]);
+          if (!wrote) {
+            recordWriteOutcome(confirmed.current, pending.current, attempt, false);
+            continue;
+          }
+          recordWriteOutcome(confirmed.current, pending.current, attempt, true);
+          disk.current = { ...(disk.current ?? EMPTY), [entry.key]: latest[entry.key] };
+        } catch {
+          recordWriteOutcome(confirmed.current, pending.current, attempt, false);
+        }
       }
+      setWriteError(pending.current.size > 0 ? WRITE_FAILED : null);
     });
   }, []);
 
@@ -129,8 +143,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setLoadError(null);
         setStore(res.store);
         ref.current = res.store;
-        disk.current = res.store;
-        persisted.current = res.persisted;
+        pending.current = new Set();
+        if (res.persisted) {
+          disk.current = res.store;
+          confirmed.current = Object.fromEntries(STORE_KEYS.map((key) => [key, JSON.stringify(res.store[key])])) as Partial<Record<StoreKey, string>>;
+        } else {
+          disk.current = null;
+          confirmed.current = {};
+        }
       }
       setReady(true);
     }).catch((e: unknown) => {
@@ -354,10 +374,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
       };
 
   return <C.Provider value={value}>{children}</C.Provider>;
-}
-
-function diffKeys(prev: Store, next: Store): StoreKey[] {
-  return STORE_KEYS.filter((key) => JSON.stringify(prev[key]) !== JSON.stringify(next[key]));
 }
 
 export function useData() {

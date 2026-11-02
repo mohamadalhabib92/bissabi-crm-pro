@@ -1,4 +1,4 @@
-import { STORE_KEYS, type Kv, type StoreKey } from './migrate';
+import { STORE_KEYS, type Kv, type Store, type StoreKey } from './migrate';
 
 /**
  * Aucune clé métier n’est écrite tant que le stockage local n’a pas été lu avec succès.
@@ -51,4 +51,38 @@ export async function commitIfHydrated(kv: Kv, entries: { key: string; value: st
 
 export function isBusinessKey(key: string): key is StoreKey {
   return BUSINESS.has(key);
+}
+
+export type DiskWrite = { key: StoreKey; value: string };
+
+/**
+ * Clés à écrire : celles qui diffèrent de la dernière valeur confirmée, plus celles dont l’écriture a échoué.
+ * `confirmed` n’est mis à jour qu’après succès, jamais avant.
+ */
+export function planDiskWrites(
+  confirmed: Partial<Record<StoreKey, string>>,
+  pending: ReadonlySet<StoreKey>,
+  next: Store,
+): DiskWrite[] {
+  const plan: DiskWrite[] = [];
+  for (const key of STORE_KEYS) {
+    const value = JSON.stringify(next[key]);
+    if (pending.has(key) || confirmed[key] !== value) plan.push({ key, value });
+  }
+  return plan;
+}
+
+/** Succès : la clé est confirmée. Échec : elle reste en attente, la valeur confirmée ne change pas. */
+export function recordWriteOutcome(
+  confirmed: Partial<Record<StoreKey, string>>,
+  pending: Set<StoreKey>,
+  entry: DiskWrite,
+  ok: boolean,
+): void {
+  if (ok) {
+    confirmed[entry.key] = entry.value;
+    pending.delete(entry.key);
+  } else {
+    pending.add(entry.key);
+  }
 }

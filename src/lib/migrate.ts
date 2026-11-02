@@ -161,13 +161,16 @@ function asCounterMap(value: unknown): Record<string, number> {
   return out;
 }
 
-/** Au moins les 3 plus récentes, et toujours la sauvegarde d’avant migration. */
+/**
+ * Garde les `keep` sauvegardes les plus récentes.
+ * Toutes les sauvegardes `pre-migration` sont conservées, y compris le snapshot d’origine :
+ * une restauration v1 en crée une nouvelle et ne doit pas faire disparaître la précédente.
+ */
 export function pruneBackups(list: BackupRecord[], keep = 3): BackupRecord[] {
   if (list.length <= keep) return list;
-  const recent = new Set(list.slice(-keep).map((b) => b.id));
-  const pre = [...list].reverse().find((b) => b.reason === 'pre-migration');
-  if (pre) recent.add(pre.id);
-  return list.filter((b) => recent.has(b.id));
+  const keepIds = new Set(list.slice(-keep).map((b) => b.id));
+  for (const backup of list) if (backup.reason === 'pre-migration') keepIds.add(backup.id);
+  return list.filter((b) => keepIds.has(b.id));
 }
 
 /** Texte de confirmation : ce qui quitte la liste active, la copie, et les numéros non réattribués. */

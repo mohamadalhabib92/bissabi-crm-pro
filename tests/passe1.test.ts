@@ -24,10 +24,11 @@ import {
   STORE_KEYS,
   type Kv,
   type Store,
+  type StoreKey,
 } from '../src/lib/migrate';
 import { DEFAULT_COMPANY, coerceInvoiceStatus, isDemo, type Account, type Expense, type Invoice, type Offer } from '../src/lib/model';
 import { nextSerial, raiseCounters } from '../src/lib/numbering';
-import { commitIfHydrated, continueOffline, resetHydrationForTests, shouldPersist, storageHydrated } from '../src/lib/persistGate';
+import { commitIfHydrated, continueOffline, planDiskWrites, recordWriteOutcome, resetHydrationForTests, shouldPersist, storageHydrated } from '../src/lib/persistGate';
 import { buildQrBill, QR_PRINT_MM, qrMatrix, qrSvg, swissCrossRect } from '../src/lib/qrbill';
 import { theme } from '../src/ui/theme';
 import { vatCSV } from '../src/lib/vatExport';
@@ -571,6 +572,59 @@ test('réinitialisation, statut émis et purge des sauvegardes', () => {
   assert.ok(pruned.some((b) => b.id === 'old-pre'));
   assert.ok(pruned.length >= 3);
   assert.ok(pruned.length < store.backups.length);
+});
+
+test('toutes les sauvegardes pre-migration sont conservées', () => {
+  const phone = { id: 'phone', at: '2026-01-01T00:00:00.000Z', reason: 'pre-migration' as const, fromVersion: 0, data: { invoices: [{ number: 'FA-2025-014' }] } };
+  const second = { id: 'v1-restore', at: '2026-03-01T00:00:00.000Z', reason: 'pre-migration' as const, fromVersion: 0, data: { invoices: [] } };
+  const manuals = ['m1', 'm2', 'm3', 'm4', 'm5'].map((id, i) => ({
+    id, at: `2026-04-0${i + 1}T00:00:00.000Z`, reason: 'manual' as const, fromVersion: 2, data: {},
+  }));
+  const pruned = pruneBackups([phone, manuals[0], manuals[1], second, ...manuals.slice(2)]);
+  assert.ok(pruned.some((b) => b.id === 'phone'));
+  assert.ok(pruned.some((b) => b.id === 'v1-restore'));
+  assert.equal(JSON.stringify(pruned.find((b) => b.id === 'phone')?.data), JSON.stringify(phone.data));
+  assert.ok(pruned.length < 7);
+  assert.ok(pruned.filter((b) => b.reason === 'pre-migration').length === 2);
+});
+
+test('une clé ratée reste à réécrire et le bandeau ne s’efface pas', () => {
+  const oldInvoice = JSON.stringify([invoice({ id: 'i-real', number: 'FA-2025-014' })]);
+  const base = {
+    accounts: [account({ id: 'a-real', nom: 'Café du Lac' })],
+    offers: [] as Offer[],
+    invoices: [invoice({ id: 'i-real', number: 'FA-2025-014' }), invoice({ id: 'i-new', number: 'FA-2026-0011', status: 'issued', paidAt: undefined })],
+    expenses: [],
+    company: { ...DEFAULT_COMPANY },
+    products: [],
+    counters: {},
+    creditNotes: [],
+    audit: [],
+    backups: [],
+    schemaVersion: SCHEMA_VERSION,
+  } satisfies Store;
+  const confirmedAll: Partial<Record<keyof Store, string>> = {
+    accounts: '[]', invoices: oldInvoice, offers: '[]', expenses: '[]', company: JSON.stringify(base.company),
+    products: '[]', counters: '{}', creditNotes: '[]', audit: '[]', backups: '[]', schemaVersion: String(SCHEMA_VERSION),
+  };
+  const failed = new Set<StoreKey>();
+  let plan = planDiskWrites(confirmedAll, failed, base);
+  assert.ok(plan.some((entry) => entry.key === 'invoices'));
+  assert.ok(plan.some((entry) => entry.key === 'accounts'));
+  const invoicesWrite = plan.find((entry) => entry.key === 'invoices')!;
+  const accountsWrite = plan.find((entry) => entry.key === 'accounts')!;
+  recordWriteOutcome(confirmedAll, failed, invoicesWrite, false);
+  recordWriteOutcome(confirmedAll, failed, accountsWrite, true);
+  assert.equal(confirmedAll.invoices, oldInvoice);
+  assert.ok(failed.has('invoices'));
+  assert.equal(failed.has('accounts'), false);
+  const withOffer = { ...base, offers: [{ id: 'o1', number: 'OF-2026-0001', accountId: 'a-real', date: '2026-04-01', validUntil: '2026-05-01', lines: [], vat: { apply: false, rate: 0 as const }, status: 'draft' as const, notes: '' }] };
+  plan = planDiskWrites(confirmedAll, failed, withOffer);
+  const keys = plan.map((entry) => entry.key);
+  assert.ok(keys.includes('invoices'));
+  assert.ok(keys.includes('offers'));
+  assert.equal(keys.includes('accounts'), false);
+  assert.ok(failed.size > 0);
 });
 
 test('schéma déjà à jour : migration sans nouveau snapshot', () => {
