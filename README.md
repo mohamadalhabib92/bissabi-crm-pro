@@ -11,7 +11,9 @@ Expo / React Native (iOS, Android) + PWA installable. **Fonctionne entièrement 
 - **Hors Vaud** : `livraison_ok=false` + avertissement « hors zone livraison actuelle » (non bloquant).
 - **Offres** : création, duplication, envoi (PDF + brouillon e-mail), acceptée / refusée, conversion en facture.
 - **Factures** : TVA **Oui / Non** par facture (taux 8.1 / 2.6 / 3.8 / 0 %). « Non » → mention « TVA non applicable ».
-- **QR-facture suisse** (SPC 0200, référence SCOR/RF ou QRR si QR-IBAN) : QR ≈ 3,5 cm, « Scannez pour payer (TWINT / e-banking) », créancier = la société. Logo vert sur les documents.
+- **QR-facture suisse** (SPC 0200, référence SCOR/RF ou QRR si QR-IBAN) : QR **46×46 mm**, récépissé 62×105 mm, section paiement 148×105 mm, « Scannez pour payer (TWINT / e-banking) » au-dessus de la section. SPÉCIMEN tant que l’IBAN n’est pas valide. Logo vert sur les documents.
+- **Numéros** : les factures déjà émises gardent leur numéro. La suite continue après le dernier. Une facture émise ne se supprime pas : on émet un avoir.
+- **Sauvegarde** : export JSON complet, CSV hors démo, fichier chiffré (phrase secrète), restauration avec retour arrière. Migration de schéma versionnée, sauvegarde automatique avant migration.
 - **Message de remerciement adaptatif** (HORECA / autre) au paiement.
 - **Dépenses** : catégories, justificatif (photo / PDF), filtre période, total, export CSV.
 - **CSV TVA** : n° facture, date, client, HT, taux, montant TVA, TTC, TVA Oui/Non.
@@ -40,10 +42,10 @@ npm run build:web       # expo export -p web + service worker, 404.html, .nojeky
 Servie sous `/bissabi-crm-pro` (`experiments.baseUrl`). `.github/workflows/pages.yml` publie `dist/` sur GitHub Pages à chaque push sur `main` (Settings → Pages → Source : GitHub Actions).
 
 ## Configuration (optionnelle)
-Copier `.env.example` vers `.env`. Seule `EXPO_PUBLIC_BACKEND_URL` est lue par l'app ; `BETTER_AUTH_SECRET`, `DATABASE_URL`, `WIX_SITE_ID`, `WIX_SITE_URL` restent **côté serveur**. Toutes les valeurs sont des `YOUR_*` à remplacer.
+Copier `.env.example` vers `.env`. Valeurs `YOUR_*` uniquement. `EXPO_PUBLIC_EXAMPLE_ENV_VAR` est supprimée. `BETTER_AUTH_SECRET` et `DATABASE_URL` sont **obsolètes** (aucun backend dans ce dépôt) et ne sont pas lues. Sentry et Supabase restent désactivés tant que le placeholder n’est pas remplacé. Aucun appel réseau au démarrage.
 
 ## Limites connues
 - Logo vert provisoire (wordmark) : remplacer `src/lib/logo.ts` par le logo officiel.
-- QR imprimé à 35 mm (demande ≈ 3,5 cm) ; la norme SIX prévoit 46 × 46 mm : vérifier avec votre banque avant usage réel.
-- Pas de synchronisation multi-appareils sans backend ; sauvegarde via export JSON.
+- QR imprimé à 46 × 46 mm (SPÉCIMEN tant que l’IBAN est `YOUR_SWISS_IBAN`). À faire valider par la banque de Mohamed avant un envoi réel.
+- Pas de synchronisation multi-appareils : sauvegarde par export JSON, CSV et fichier chiffré.
 - PDF et e-mails en français uniquement.

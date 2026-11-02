@@ -5,6 +5,7 @@ import { useData } from '@/lib/data';
 import { downloadText } from '@/lib/download';
 import { chf, dateCH, todayISO } from '@/lib/format';
 import { isPlaceholderIban } from '@/lib/iban';
+import { bookTotals } from '@/lib/invoices';
 import { stageLabel, totals } from '@/lib/model';
 import { inPeriod, PERIODS, type Period } from '@/lib/period';
 import { vatCSV } from '@/lib/vatExport';
@@ -12,26 +13,30 @@ import { Badge, Button, Card, DemoBanner, Divider, Eyebrow, H1, H2, ListItem, Mu
 import { theme as t } from '@/ui/theme';
 
 export default function Dashboard() {
-  const { invoices, expenses, accounts, company, hasDemo, removeDemo } = useData();
+  const { invoices, expenses, accounts, company, hasDemo, removeDemo, migrationWarning } = useData();
   const router = useRouter();
   const [p, setP] = useState<Period>('month');
   const k = useMemo(() => {
-    const issued = invoices.filter((i) => i.status !== 'draft' && i.status !== 'cancelled');
-    const inP = issued.filter((i) => inPeriod(i.date, p));
-    const ca = inP.reduce((s, i) => s + totals(i.lines, i.vat).ht, 0);
-    const cash = issued.filter((i) => i.status === 'paid' && inPeriod(i.paidAt, p)).reduce((s, i) => s + totals(i.lines, i.vat).ttc, 0);
-    const open = inP.filter((i) => i.status === 'sent').reduce((s, i) => s + totals(i.lines, i.vat).ttc, 0);
+    const booked = invoices.flatMap((i) => {
+      const t = bookTotals(i);
+      return t ? [{ i, t }] : [];
+    });
+    const inP = booked.filter((x) => inPeriod(x.i.date, p));
+    const ca = inP.reduce((s, x) => s + x.t.ht, 0);
+    const cash = booked.filter((x) => x.i.paidAt && x.i.kind !== 'credit' && inPeriod(x.i.paidAt, p)).reduce((s, x) => s + x.t.ttc, 0);
+    const open = invoices
+      .filter((i) => (i.status === 'sent' || i.status === 'issued') && i.kind !== 'credit' && inPeriod(i.date, p))
+      .reduce((s, i) => s + totals(i.lines, i.vat).ttc, 0);
     const exp = expenses.filter((e) => inPeriod(e.date, p));
     const expTTC = exp.reduce((s, e) => s + e.amountTTC, 0);
     const expHT = exp.reduce((s, e) => s + e.amountTTC - (e.vatAmount || 0), 0);
     const vat = new Map<number, { base: number; tva: number }>();
-    inP.filter((i) => i.vat.apply).forEach((i) => {
-      const tt = totals(i.lines, i.vat);
-      const cur = vat.get(i.vat.rate) ?? { base: 0, tva: 0 };
-      vat.set(i.vat.rate, { base: cur.base + tt.ht, tva: cur.tva + tt.tva });
+    inP.filter((x) => x.i.vat.apply).forEach((x) => {
+      const cur = vat.get(x.i.vat.rate) ?? { base: 0, tva: 0 };
+      vat.set(x.i.vat.rate, { base: cur.base + x.t.ht, tva: cur.tva + x.t.tva });
     });
-    const overdue = issued.filter((i) => i.status === 'sent' && i.dueDate < todayISO());
-    return { ca, cash, open, expTTC, margin: ca - expHT, vat: [...vat.entries()].sort((a, b) => b[0] - a[0]), overdue, count: inP.length, noVat: inP.filter((i) => !i.vat.apply).length };
+    const overdue = invoices.filter((i) => (i.status === 'sent' || i.status === 'issued') && i.kind !== 'credit' && i.dueDate < todayISO());
+    return { ca, cash, open, expTTC, margin: ca - expHT, vat: [...vat.entries()].sort((a, b) => b[0] - a[0]), overdue, count: inP.length, noVat: inP.filter((x) => !x.i.vat.apply).length };
   }, [invoices, expenses, p]);
   const actions = accounts.filter((a) => a.prochaine_action && a.prochaine_action_date).sort((a, b) => a.prochaine_action_date.localeCompare(b.prochaine_action_date)).slice(0, 5);
 
@@ -46,6 +51,7 @@ export default function Dashboard() {
       ) : null}
       <Eyebrow>{company.name}</Eyebrow>
       <H1>Tableau de bord</H1>
+      {migrationWarning ? <Notice tone="warning" title="Migration reportée" text={migrationWarning} /> : null}
       {isPlaceholderIban(company.iban) ? (
         <Notice tone="warning" title="IBAN non configuré" text="Les QR-factures sont générées en SPÉCIMEN (YOUR_SWISS_IBAN). Renseignez l’IBAN dans Réglages société." icon="qr-code-outline" />
       ) : null}

@@ -1,13 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { STORAGE_PREFIX } from './storageKey';
+
+export { STORAGE_PREFIX };
 
 /**
  * Stockage local (AsyncStorage sur mobile, localStorage sur le web).
  * Toutes les données « cœur » vivent ici : l'app fonctionne hors-ligne,
- * sans backend ni API payante.
+ * sans backend ni API payante. Le préfixe STORAGE_PREFIX ne doit pas changer.
  */
-// Préfixe propre à l'app : plusieurs PWA partagent la même origine sur GitHub Pages.
-const PREFIX = '@bissabi-crm-pro/';
+const PREFIX = STORAGE_PREFIX;
 
 export async function loadJSON<T>(key: string, fallback: T): Promise<T> {
   try {
@@ -18,11 +20,33 @@ export async function loadJSON<T>(key: string, fallback: T): Promise<T> {
   }
 }
 
-export async function saveJSON<T>(key: string, value: T): Promise<void> {
+/** `false` si l'écriture a échoué (stockage plein, etc.). L'appelant décide de ne pas migrer. */
+export async function saveJSON<T>(key: string, value: T): Promise<boolean> {
   try {
     await AsyncStorage.setItem(PREFIX + key, JSON.stringify(value));
+    return true;
   } catch {
-    // stockage plein / indisponible : on ne crashe jamais l'UI
+    return false;
+  }
+}
+
+export type StorageRead =
+  | { state: 'missing' }
+  | { state: 'ok'; value: unknown }
+  | { state: 'corrupt'; raw: string };
+
+/** Lecture stricte : une valeur illisible n'est jamais remplacée par un jeu de démo. */
+export async function readStorageEntry(key: string): Promise<StorageRead> {
+  try {
+    const raw = await AsyncStorage.getItem(PREFIX + key);
+    if (raw == null) return { state: 'missing' };
+    try {
+      return { state: 'ok', value: JSON.parse(raw) };
+    } catch {
+      return { state: 'corrupt', raw };
+    }
+  } catch (e) {
+    return { state: 'corrupt', raw: e instanceof Error ? e.message : 'read-failed' };
   }
 }
 

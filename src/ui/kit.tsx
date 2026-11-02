@@ -224,7 +224,7 @@ export function Segmented<T extends string | number>({ options, value, onChange,
               accessibilityState={{ checked: on }}
               style={[styles.segItem, on && { backgroundColor: t.surface, ...shadow(1) }]}
             >
-              <Text style={{ color: on ? t.text : t.muted, fontWeight: on ? '700' : '500', fontSize: 14 }}>{o.label}</Text>
+              <Text style={{ color: t.text, fontWeight: on ? '700' : '500', fontSize: 14 }}>{o.label}</Text>
             </Pressable>
           );
         })}
@@ -318,7 +318,7 @@ export function Stat({ label, value, sub }: { label: string; value: string; sub?
   return (
     <View style={[styles.card, { flex: 1, minWidth: 140, marginBottom: 0 }]}>
       <Muted style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.8 }}>{label}</Muted>
-      <Text style={{ color: t.text, fontSize: 22, fontWeight: '700', marginTop: 4 }}>{value}</Text>
+      <Text style={{ color: t.text, fontSize: 22, fontWeight: '700', marginTop: 4, fontVariant: ['tabular-nums'] }}>{value}</Text>
       {sub ? <Muted style={{ fontSize: 12, marginTop: 2 }}>{sub}</Muted> : null}
     </View>
   );
@@ -351,7 +351,7 @@ export const styles = StyleSheet.create({
   h2: { color: t.text, fontSize: 18, fontWeight: '700', letterSpacing: -0.2, marginBottom: 8 },
   body: { color: t.text, fontSize: 16, lineHeight: 23 },
   muted: { color: t.muted, fontSize: 15, lineHeight: 21 },
-  eyebrow: { color: t.accent, fontSize: 12, fontWeight: '700', letterSpacing: 1.6, textTransform: 'uppercase', marginBottom: 6 },
+  eyebrow: { color: t.primary, fontSize: 12, fontWeight: '700', letterSpacing: 1.6, textTransform: 'uppercase', marginBottom: 6 },
   card: {
     backgroundColor: t.surface,
     borderRadius: t.radius,

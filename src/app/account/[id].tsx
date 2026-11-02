@@ -40,7 +40,7 @@ export default function AccountScreen() {
 
   const hist = [
     ...offers.filter((o) => o.accountId === f.id).map((o) => ({ k: o.id, title: `Offre ${o.number}`, sub: `${dateCH(o.date)} · ${chf(totals(o.lines, o.vat).ttc)} · ${OFFER_STATUS[o.status]}`, go: () => router.push({ pathname: '/offer/[id]', params: { id: o.id } }) })),
-    ...invoices.filter((i) => i.accountId === f.id).map((i) => ({ k: i.id, title: `Facture ${i.number}`, sub: `${dateCH(i.date)} · ${chf(totals(i.lines, i.vat).ttc)} · ${INVOICE_STATUS[i.status]}`, go: () => router.push({ pathname: '/invoice/[id]', params: { id: i.id } }) })),
+    ...invoices.filter((i) => i.accountId === f.id).map((i) => ({ k: i.id, title: `${i.kind === 'credit' ? 'Avoir' : 'Facture'} ${i.number || 'brouillon'}`, sub: `${dateCH(i.date)} · ${chf((i.kind === 'credit' ? -1 : 1) * totals(i.lines, i.vat).ttc)} · ${INVOICE_STATUS[i.status]}`, go: () => router.push({ pathname: '/invoice/[id]', params: { id: i.id } }) })),
   ];
 
   return (

@@ -64,11 +64,20 @@ export type Offer = {
   status: OfferStatus; notes: string; invoiceId?: string; demo?: boolean;
 };
 
-export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'cancelled';
-export const INVOICE_STATUS: Record<InvoiceStatus, string> = { draft: 'Brouillon', sent: 'Envoyée', paid: 'Payée', cancelled: 'Annulée' };
+export type InvoiceStatus = 'draft' | 'issued' | 'sent' | 'partial' | 'paid' | 'cancelled';
+export const INVOICE_STATUS: Record<InvoiceStatus, string> = {
+  draft: 'Brouillon', issued: 'Émise', sent: 'Envoyée', partial: 'Partiellement payée', paid: 'Payée', cancelled: 'Annulée',
+};
+/** Absent ou « invoice » = facture. « credit » = avoir. Champ additif : les factures déjà stockées n'ont pas cette clé. */
+export type InvoiceKind = 'invoice' | 'credit';
 export type Invoice = {
   id: string; number: string; accountId: string; date: string; dueDate: string; lines: Line[]; vat: Vat;
   status: InvoiceStatus; paidAt?: string; offerId?: string; notes: string; demo?: boolean; ext?: string; source?: string;
+  kind?: InvoiceKind;
+  /** Avoir → facture d'origine. Facture → id de l'avoir qui l'annule. */
+  relatedId?: string;
+  creditedBy?: string;
+  issuedAt?: string;
 };
 
 export const EXPENSE_CATEGORIES = [
@@ -88,7 +97,9 @@ export type Product = {
 
 export type Company = {
   name: string; street: string; houseNo: string; zip: string; town: string; country: string; uid: string;
-  email: string; phone: string; website: string; iban: string; tagline: string; paymentDays: number; vatDefault: boolean; vatRateDefault: VatRate;
+  email: string; phone: string; website: string; iban: string; tagline: string;   paymentDays: number; vatDefault: boolean; vatRateDefault: VatRate;
+  /** Vide ou YOUR_* : aucun numéro TVA imprimé. Jamais inventé. */
+  vatNumber?: string;
   lang: 'fr' | 'de' | 'it' | 'en';
 };
 
@@ -108,6 +119,7 @@ export const DEFAULT_COMPANY: Company = {
   paymentDays: 30,
   vatDefault: false,
   vatRateDefault: 8.1,
+  vatNumber: '',
   lang: 'fr',
 };
 
