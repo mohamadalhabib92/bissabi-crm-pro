@@ -3,6 +3,7 @@ import { appendAudit } from './audit';
 import { decryptBackup, encryptBackup, fullCsv, plainExport } from './backup';
 import { addDays, todayISO } from './format';
 import {
+  applyReset,
   applyRestore,
   loadAndMigrate,
   parsePlainBackup,
@@ -14,7 +15,7 @@ import {
   type Store,
   type StoreKey,
 } from './migrate';
-import { DEFAULT_COMPANY, isDemo, type Account, type Company, type CreditNote, type Expense, type Invoice, type Offer, type Product } from './model';
+import { DEFAULT_COMPANY, coerceInvoiceStatus, isDemo, type Account, type Company, type CreditNote, type Expense, type Invoice, type Offer, type Product } from './model';
 import { nextSerial } from './numbering';
 import { commitIfHydrated, continueOffline, markStorageHydrated, storageHydrated } from './persistGate';
 import { asyncStorageKv } from './storage';
@@ -26,6 +27,8 @@ type Setter<T> = (v: T | ((p: T) => T)) => void;
 type Ctx = {
   ready: boolean;
   loadError: string | null;
+  writeError: string | null;
+  dismissWriteError: () => void;
   retry: () => void;
   accounts: Account[];
   setAccounts: Setter<Account[]>;
@@ -73,6 +76,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [store, setStore] = useState<Store | null>(null);
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [writeError, setWriteError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const ref = useRef<Store | null>(null);
   const disk = useRef<Store | null>(null);
@@ -89,9 +93,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (!keys.length) return;
     const entries = keys.map((key) => ({ key, value: JSON.stringify(next[key]) }));
     const kv = asyncStorageKv();
-    queue.current = queue.current
-      .then(() => commitIfHydrated(kv, entries))
-      .then(() => undefined, () => undefined);
+    queue.current = queue.current.then(async () => {
+      try {
+        const wrote = await commitIfHydrated(kv, entries);
+        if (wrote) setWriteError(null);
+      } catch {
+        setWriteError('L’enregistrement a échoué. Les changements restent à l’écran mais ne sont pas tous sur l’appareil. Libérez de l’espace, puis modifiez à nouveau pour réessayer.');
+      }
+    });
   }, []);
 
   const mutate = useCallback((recipe: (s: Store) => Store): Store | null => {
@@ -168,8 +177,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const prev = s.invoices.find((i) => i.id === rec.id);
       let counters = s.counters;
       let nextRec: Invoice = { ...rec };
+      if (prev && prev.status !== 'draft' && rec.status === 'draft') {
+        saved = prev;
+        return s;
+      }
       if (prev && prev.status !== 'draft') {
-        nextRec = { ...prev, status: rec.status, paidAt: rec.paidAt ?? prev.paidAt, creditNoteId: rec.creditNoteId ?? prev.creditNoteId };
+        nextRec = { ...prev, status: coerceInvoiceStatus(prev.status, rec.status), paidAt: rec.paidAt ?? prev.paidAt, creditNoteId: rec.creditNoteId ?? prev.creditNoteId };
       }
       if (!nextRec.number && nextRec.status !== 'draft') {
         const alloc = allocate('FA', { ...s, counters });
@@ -292,29 +305,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [flush]);
 
   const resetBusiness = useCallback(() => {
-    mutate((s) => {
-      const backup: BackupRecord = {
-        id: uid('bak_'), at: new Date().toISOString(), reason: 'pre-reset', fromVersion: s.schemaVersion,
-        data: {
-          accounts: s.accounts, offers: s.offers, invoices: s.invoices, expenses: s.expenses,
-          company: s.company, products: s.products, counters: s.counters, creditNotes: s.creditNotes,
-        },
-      };
-      return {
-        ...s,
-        accounts: [], offers: [], invoices: [], expenses: [], products: [], creditNotes: [], counters: {},
-        company: { ...DEFAULT_COMPANY },
-        backups: [...s.backups, backup],
-        schemaVersion: SCHEMA_VERSION,
-        audit: appendAudit(s.audit, { action: 'backup', entity: 'store', detail: 'Réinitialisation après export.' }),
-      };
-    });
+    mutate((s) => applyReset(s, new Date().toISOString()));
   }, [mutate]);
 
   const value: Ctx = store
     ? {
         ready: ready && !loadError,
         loadError,
+        writeError,
+        dismissWriteError: () => setWriteError(null),
         retry,
         accounts: store.accounts,
         setAccounts,
@@ -347,7 +346,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         resetBusiness,
       }
     : {
-        ready: false, loadError, retry,
+        ready: false, loadError, writeError, dismissWriteError: () => setWriteError(null), retry,
         accounts: [], setAccounts, offers: [], setOffers, invoices: [], setInvoices, expenses: [], setExpenses,
         company: { ...DEFAULT_COMPANY }, setCompany, products: [], setProducts, creditNotes: [], audit: [], backups: [],
         nextNumber, convertOfferToInvoice, saveInvoice, deleteDraftInvoice, cancelInvoiceWithCredit, removeDemo,

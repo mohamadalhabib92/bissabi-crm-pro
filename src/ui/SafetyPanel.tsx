@@ -5,6 +5,7 @@ import { confirmAsk } from '@/lib/confirm';
 import { downloadText } from '@/lib/download';
 import { dateCH, todayISO } from '@/lib/format';
 import { AUDIT_LABEL } from '@/lib/audit';
+import { describeRollback } from '@/lib/migrate';
 import { Button, Card, Field, H2, ListItem, Muted, Notice, Spacer } from './kit';
 
 async function readAsset(asset: { file?: File; uri: string }): Promise<string> {
@@ -86,9 +87,9 @@ export function SafetyPanel() {
           <>
             <Spacer h={8} />
             <ListItem icon="archive-outline" title="Télécharger la sauvegarde d’avant migration" subtitle={dateCH(pre.at.slice(0, 10))} onPress={() => void downloadText(`bissabi-avant-migration-${todayISO()}.json`, JSON.stringify(pre.data, null, 2), 'application/json')} />
-            <Button variant="ghost" title="Revenir aux données d’avant migration" onPress={() => confirmAsk('Revenir au snapshot d’avant migration ?', 'Les numéros et pièces de ce snapshot remplacent les données actuelles. Le journal n’est pas effacé.', () => {
+            <Button variant="ghost" title="Revenir aux données d’avant migration" onPress={() => confirmAsk('Remplacer les données par le snapshot d’avant migration ?', describeRollback(data), () => {
               const res = data.rollbackMigration();
-              setMsg(res.ok ? { tone: 'success', title: 'Snapshot restauré' } : { tone: 'danger', title: res.error });
+              setMsg(res.ok ? { tone: 'success', title: 'Snapshot restauré', text: 'Une copie de l’état précédent a été conservée. Les numéros déjà attribués ne seront pas redonnés.' } : { tone: 'danger', title: res.error });
             })} />
           </>
         ) : null}
@@ -104,7 +105,7 @@ export function SafetyPanel() {
       <Spacer />
       <H2>Zone sensible</H2>
       <Card>
-        <ListItem icon="trash-outline" title="Réinitialiser les données métier" subtitle="Export JSON obligatoire avant effacement. Le journal reste." onPress={reset} />
+        <ListItem icon="trash-outline" title="Réinitialiser les données métier" subtitle="Export JSON obligatoire. Les compteurs de numéros sont conservés." onPress={reset} />
       </Card>
     </>
   );

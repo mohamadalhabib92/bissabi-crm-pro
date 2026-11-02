@@ -1,13 +1,14 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
+import { Pressable, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { DataProvider, useData } from '@/lib/data';
 import { AppErrorBoundary, BootFallback } from '@/ui/AppGuard';
 import { theme as t } from '@/ui/theme';
 
 function Root() {
-  const { ready, loadError, retry } = useData();
+  const { ready, loadError, writeError, dismissWriteError, retry } = useData();
   const [slow, setSlow] = useState(false);
   useEffect(() => {
     if (ready || loadError) {
@@ -29,6 +30,16 @@ function Root() {
     );
   }
   return (
+    <View style={{ flex: 1, backgroundColor: t.bg }}>
+      {writeError ? (
+        <View style={{ backgroundColor: t.dangerBg, paddingHorizontal: 16, paddingVertical: 12 }}>
+          <Text style={{ color: t.danger, fontWeight: '700' }}>Enregistrement impossible</Text>
+          <Text style={{ color: t.text, marginTop: 4, lineHeight: 20 }}>{writeError}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Masquer l’alerte d’enregistrement" onPress={dismissWriteError} style={{ marginTop: 8, minHeight: 44, justifyContent: 'center' }}>
+            <Text style={{ color: t.primary, fontWeight: '700' }}>Masquer</Text>
+          </Pressable>
+        </View>
+      ) : null}
     <Stack screenOptions={{ headerTintColor: t.primary, headerStyle: { backgroundColor: t.bg }, headerShadowVisible: false, contentStyle: { backgroundColor: t.bg }, headerBackTitle: 'Retour' }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="account/[id]" options={{ title: 'Compte' }} />
@@ -40,6 +51,7 @@ function Root() {
       <Stack.Screen name="settings" options={{ title: 'Réglages société' }} />
       <Stack.Screen name="config" options={{ title: 'Configuration' }} />
     </Stack>
+    </View>
   );
 }
 

@@ -72,6 +72,12 @@ export const INVOICE_STATUS: Record<InvoiceStatus, string> = {
 export function isOpenStatus(s: InvoiceStatus): boolean {
   return s === 'issued' || s === 'sent' || s === 'partial';
 }
+
+/** Une facture déjà émise ne peut pas redevenir un brouillon. */
+export function coerceInvoiceStatus(prev: InvoiceStatus | undefined, requested: InvoiceStatus): InvoiceStatus {
+  if (prev && prev !== 'draft' && requested === 'draft') return prev;
+  return requested;
+}
 export type Invoice = {
   id: string; number: string; accountId: string; date: string; dueDate: string; lines: Line[]; vat: Vat;
   status: InvoiceStatus; paidAt?: string; issuedAt?: string; creditNoteId?: string; offerId?: string; notes: string;

@@ -1,5 +1,5 @@
 import { appendAudit, type AuditEvent } from './audit';
-import { raiseCounters } from './numbering';
+import { mergeCounters, raiseCounters } from './numbering';
 import { DEFAULT_COMPANY, isDemo, type Account, type Company, type CreditNote, type Expense, type Invoice, type Offer, type Product } from './model';
 import { SEED_ACCOUNTS, SEED_EXPENSES, SEED_INVOICES, SEED_OFFERS } from './seed';
 import { uid } from './uid';
@@ -12,7 +12,7 @@ export const CORE_KEYS = ['accounts', 'offers', 'invoices', 'expenses', 'company
 export const STORE_KEYS = [...CORE_KEYS, 'creditNotes', 'audit', 'backups', 'schemaVersion'] as const;
 export type StoreKey = (typeof STORE_KEYS)[number];
 
-export type BackupReason = 'pre-migration' | 'pre-restore' | 'pre-reset' | 'manual';
+export type BackupReason = 'pre-migration' | 'pre-restore' | 'pre-reset' | 'pre-rollback' | 'manual';
 export type BackupRecord = {
   id: string;
   at: string;
@@ -134,7 +134,7 @@ export function applySchemaMigration(store: Store, now: string): { store: Store;
     company: vat.company,
     counters,
     schemaVersion: SCHEMA_VERSION,
-    backups: [...store.backups, backup],
+    backups: pruneBackups([...store.backups, backup]),
     audit: appendAudit(store.audit, {
       action: 'migration',
       entity: 'store',
@@ -145,26 +145,118 @@ export function applySchemaMigration(store: Store, now: string): { store: Store;
   return { store: migrated, changed: true };
 }
 
+function numbersOf(rows: unknown): string[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((row) => {
+    const number = row && typeof row === 'object' ? (row as { number?: unknown }).number : undefined;
+    return typeof number === 'string' && number ? [number] : [];
+  });
+}
+
+function asCounterMap(value: unknown): Record<string, number> {
+  const rec = asRecord(value);
+  if (!rec) return {};
+  const out: Record<string, number> = {};
+  for (const [key, n] of Object.entries(rec)) if (typeof n === 'number' && Number.isFinite(n)) out[key] = n;
+  return out;
+}
+
+/** Au moins les 3 plus récentes, et toujours la sauvegarde d’avant migration. */
+export function pruneBackups(list: BackupRecord[], keep = 3): BackupRecord[] {
+  if (list.length <= keep) return list;
+  const recent = new Set(list.slice(-keep).map((b) => b.id));
+  const pre = [...list].reverse().find((b) => b.reason === 'pre-migration');
+  if (pre) recent.add(pre.id);
+  return list.filter((b) => recent.has(b.id));
+}
+
+/** Texte de confirmation : ce qui quitte la liste active, la copie, et les numéros non réattribués. */
+export function describeRollback(store: Pick<Store, 'invoices' | 'accounts' | 'expenses' | 'offers' | 'creditNotes' | 'backups'>): string {
+  const backup = [...store.backups].reverse().find((b) => b.reason === 'pre-migration');
+  if (!backup) return 'Aucune sauvegarde d’avant migration.';
+  const snapIds = (rows: unknown) => new Set(Array.isArray(rows) ? rows.flatMap((row) => {
+    const id = row && typeof row === 'object' ? (row as { id?: unknown }).id : undefined;
+    return typeof id === 'string' ? [id] : [];
+  }) : []);
+  const missing = (current: { id: string; number?: string }[], snap: unknown, label: string) => {
+    const ids = snapIds(snap);
+    const gone = current.filter((row) => !ids.has(row.id));
+    if (!gone.length) return '';
+    const names = gone.map((row) => row.number || row.id).slice(0, 8);
+    const more = gone.length > names.length ? ` (+${gone.length - names.length})` : '';
+    return `${label} retirés de la liste active : ${names.join(', ')}${more}. `;
+  };
+  const data = backup.data;
+  const detail = [
+    missing(store.accounts, data.accounts, 'Comptes'),
+    missing(store.offers, data.offers, 'Offres'),
+    missing(store.invoices, data.invoices, 'Factures'),
+    missing(store.creditNotes, data.creditNotes, 'Avoirs'),
+    missing(store.expenses.map((e) => ({ id: e.id, number: e.id })), data.expenses, 'Dépenses'),
+  ].join('');
+  return `Les comptes, offres, factures, dépenses et avoirs ouverts seront remplacés par le snapshot d’avant migration. ${detail}Une copie de l’état actuel est enregistrée avant le remplacement. Les numéros déjà attribués (même ceux qui quittent la liste) ne seront pas redonnés. Le journal n’est pas effacé.`;
+}
+
 export function rollbackMigration(store: Store, now: string): { ok: true; store: Store } | { ok: false; error: string } {
   const backup = [...store.backups].reverse().find((b) => b.reason === 'pre-migration');
   if (!backup) return { ok: false, error: 'Aucune sauvegarde d’avant migration.' };
   const data = backup.data;
+  const snapInvoices = Array.isArray(data.invoices) ? (data.invoices as Invoice[]) : store.invoices;
+  const snapOffers = Array.isArray(data.offers) ? (data.offers as Offer[]) : store.offers;
+  const snapCredits = Array.isArray(data.creditNotes) ? (data.creditNotes as CreditNote[]) : store.creditNotes;
+  const safety: BackupRecord = {
+    id: uid('bak_'),
+    at: now,
+    reason: 'pre-rollback',
+    fromVersion: store.schemaVersion,
+    data: businessSnapshot(store),
+  };
   const restored: Store = {
     ...store,
     accounts: Array.isArray(data.accounts) ? (data.accounts as Account[]) : store.accounts,
-    offers: Array.isArray(data.offers) ? (data.offers as Offer[]) : store.offers,
-    invoices: Array.isArray(data.invoices) ? (data.invoices as Invoice[]) : store.invoices,
+    offers: snapOffers,
+    invoices: snapInvoices,
     expenses: Array.isArray(data.expenses) ? (data.expenses as Expense[]) : store.expenses,
     products: Array.isArray(data.products) ? (data.products as Product[]) : store.products,
-    creditNotes: Array.isArray(data.creditNotes) ? (data.creditNotes as CreditNote[]) : [],
-    counters: asRecord(data.counters) ? (data.counters as Record<string, number>) : {},
+    creditNotes: snapCredits,
+    counters: mergeCounters({
+      current: store.counters,
+      incoming: asCounterMap(data.counters),
+      invoices: [...store.invoices.map((i) => i.number), ...numbersOf(data.invoices)],
+      offers: [...store.offers.map((o) => o.number), ...numbersOf(data.offers)],
+      creditNotes: [...store.creditNotes.map((c) => c.number), ...numbersOf(data.creditNotes)],
+    }),
     company: asRecord(data.company) ? ({ ...DEFAULT_COMPANY, ...(data.company as Company) }) : store.company,
-    // Le journal et les sauvegardes ne rétrécissent pas.
-    backups: store.backups,
+    backups: pruneBackups([...store.backups, safety]),
     schemaVersion: SCHEMA_VERSION,
-    audit: appendAudit(store.audit, { action: 'rollback', entity: 'store', at: now, detail: `Retour au snapshot ${backup.id}.` }),
+    audit: appendAudit(store.audit, { action: 'rollback', entity: 'store', at: now, detail: `Retour au snapshot ${backup.id}. Copie de l’état précédent : ${safety.id}.` }),
   };
   return { ok: true, store: restored };
+}
+
+/** Réinitialise les listes métier sans remettre les compteurs à zéro. */
+export function applyReset(store: Store, now: string): Store {
+  const backup: BackupRecord = {
+    id: uid('bak_'),
+    at: now,
+    reason: 'pre-reset',
+    fromVersion: store.schemaVersion,
+    data: businessSnapshot(store),
+  };
+  return {
+    ...store,
+    accounts: [],
+    offers: [],
+    invoices: [],
+    expenses: [],
+    products: [],
+    creditNotes: [],
+    counters: store.counters,
+    company: { ...DEFAULT_COMPANY },
+    backups: pruneBackups([...store.backups, backup]),
+    schemaVersion: SCHEMA_VERSION,
+    audit: appendAudit(store.audit, { action: 'backup', entity: 'store', at: now, detail: 'Réinitialisation après export. Compteurs conservés.' }),
+  };
 }
 
 const ARRAY_KEYS = ['accounts', 'offers', 'invoices', 'expenses', 'products', 'creditNotes', 'audit', 'backups'] as const;
@@ -196,14 +288,20 @@ export function applyRestore(current: Store, data: Record<string, unknown>, now:
     fromVersion: current.schemaVersion,
     data: businessSnapshot(current),
   };
-  const next: Store = { ...current, backups: [...current.backups, backup] };
+  const next: Store = { ...current, backups: pruneBackups([...current.backups, backup]) };
   if (Array.isArray(data.accounts)) next.accounts = data.accounts as Account[];
   if (Array.isArray(data.offers)) next.offers = data.offers as Offer[];
   if (Array.isArray(data.invoices)) next.invoices = data.invoices as Invoice[];
   if (Array.isArray(data.expenses)) next.expenses = data.expenses as Expense[];
   if (Array.isArray(data.products)) next.products = data.products as Product[];
   if (Array.isArray(data.creditNotes)) next.creditNotes = data.creditNotes as CreditNote[];
-  if (asRecord(data.counters)) next.counters = data.counters as Record<string, number>;
+  next.counters = mergeCounters({
+    current: current.counters,
+    incoming: asCounterMap(data.counters),
+    invoices: [...current.invoices.map((i) => i.number), ...numbersOf(data.invoices)],
+    offers: [...current.offers.map((o) => o.number), ...numbersOf(data.offers)],
+    creditNotes: [...current.creditNotes.map((c) => c.number), ...numbersOf(data.creditNotes)],
+  });
   if (asRecord(data.company)) next.company = { ...DEFAULT_COMPANY, ...(data.company as Company) };
   if (Array.isArray(data.audit)) {
     const ids = new Set(current.audit.map((event) => event.id));
@@ -219,7 +317,7 @@ function fail(label: string): string {
   return `La clé « ${label} » est illisible. Aucune donnée n’a été réécrite.`;
 }
 
-export async function loadAndMigrate(kv: Kv, now: string): Promise<{ store: Store; persisted: boolean } | { error: string }> {
+async function loadAndMigrateBody(kv: Kv, now: string): Promise<{ store: Store; persisted: boolean } | { error: string }> {
   const raw: Partial<Record<StoreKey, string>> = {};
   const parsed: Partial<Record<StoreKey, unknown>> = {};
   for (const key of STORE_KEYS) {
@@ -274,13 +372,41 @@ export async function loadAndMigrate(kv: Kv, now: string): Promise<{ store: Stor
   if (!result.changed) return { store: result.store, persisted: true };
 
   const next = result.store;
-  const writes: [StoreKey, unknown][] = [
-    ['schemaVersion', next.schemaVersion],
-    ['backups', next.backups],
-    ['audit', next.audit],
-  ];
-  if (JSON.stringify(next.counters) !== JSON.stringify(store.counters)) writes.push(['counters', next.counters]);
-  if (raw.company != null && JSON.stringify(next.company) !== JSON.stringify(parsed.company)) writes.push(['company', next.company]);
-  for (const [key, value] of writes) await kv.set(key, JSON.stringify(value));
+  const preMigration = [...next.backups].reverse().find((b) => b.reason === 'pre-migration');
+  if (!preMigration) return { error: 'Sauvegarde d’avant migration absente. Aucune version de schéma n’a été écrite.' };
+  try {
+    await kv.set('backups', JSON.stringify(next.backups));
+    const saved = await kv.get('backups');
+    const confirmed = parseBackupList(saved).some((b) => b.id === preMigration.id && b.reason === 'pre-migration');
+    if (!confirmed) return { error: 'La sauvegarde d’avant migration n’a pas pu être confirmée. Aucune version de schéma n’a été écrite.' };
+    if (JSON.stringify(next.counters) !== JSON.stringify(store.counters)) await kv.set('counters', JSON.stringify(next.counters));
+    if (raw.company != null && JSON.stringify(next.company) !== JSON.stringify(parsed.company)) await kv.set('company', JSON.stringify(next.company));
+    await kv.set('audit', JSON.stringify(next.audit));
+    await kv.set('schemaVersion', JSON.stringify(next.schemaVersion));
+    const versionRaw = await kv.get('schemaVersion');
+    const version = versionRaw == null ? NaN : (JSON.parse(versionRaw) as unknown);
+    if (version !== SCHEMA_VERSION) return { error: 'La version de schéma n’a pas été confirmée.' };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Écriture de la migration impossible. Le schéma n’a pas été avancé si la sauvegarde a échoué.' };
+  }
   return { store: next, persisted: true };
+}
+
+function parseBackupList(raw: string | null): BackupRecord[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? (parsed as BackupRecord[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+let loadQueue: Promise<unknown> = Promise.resolve();
+
+/** Une seule lecture / migration à la fois : la suivante attend la fin de la précédente. */
+export function loadAndMigrate(kv: Kv, now: string): Promise<{ store: Store; persisted: boolean } | { error: string }> {
+  const run = loadQueue.then(() => loadAndMigrateBody(kv, now));
+  loadQueue = run.then(() => undefined, () => undefined);
+  return run;
 }

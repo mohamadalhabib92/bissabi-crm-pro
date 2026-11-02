@@ -11,9 +11,13 @@ import { invoiceHtml } from '../src/lib/documents';
 import { env } from '../src/lib/config';
 import { isQrIban, isValidIban, isValidScor, scorReference } from '../src/lib/iban';
 import {
+  applyReset,
+  applyRestore,
   applySchemaMigration,
+  describeRollback,
   entityCounts,
   loadAndMigrate,
+  pruneBackups,
   rollbackMigration,
   SCHEMA_VERSION,
   stripDemo,
@@ -21,7 +25,7 @@ import {
   type Kv,
   type Store,
 } from '../src/lib/migrate';
-import { DEFAULT_COMPANY, isDemo, type Account, type Expense, type Invoice, type Offer } from '../src/lib/model';
+import { DEFAULT_COMPANY, coerceInvoiceStatus, isDemo, type Account, type Expense, type Invoice, type Offer } from '../src/lib/model';
 import { nextSerial, raiseCounters } from '../src/lib/numbering';
 import { commitIfHydrated, continueOffline, resetHydrationForTests, shouldPersist, storageHydrated } from '../src/lib/persistGate';
 import { buildQrBill, QR_PRINT_MM, qrMatrix, qrSvg, swissCrossRect } from '../src/lib/qrbill';
@@ -384,6 +388,189 @@ test('timeout puis continuer : les données stockées ne sont pas écrasées', a
   assert.equal(kv.data.accounts, accounts);
   assert.equal(kv.data.expenses, expenses);
   assert.equal(shouldPersist(true, 'invoices'), false);
+});
+
+test('retour arrière : copie préalable et numéros FA-2026-0009 / 0010 non réattribués', () => {
+  const early = invoice({ id: 'i8', number: 'FA-2026-0008', status: 'sent', paidAt: undefined });
+  const later = [
+    invoice({ id: 'i9', number: 'FA-2026-0009', status: 'sent', paidAt: undefined }),
+    invoice({ id: 'i10', number: 'FA-2026-0010', status: 'sent', paidAt: undefined }),
+  ];
+  const store = {
+    accounts: [],
+    offers: [],
+    invoices: [early, ...later],
+    expenses: [],
+    company: { ...DEFAULT_COMPANY },
+    products: [],
+    counters: { 'FA-2026': 10 },
+    creditNotes: [],
+    audit: [],
+    backups: [{
+      id: 'bak-pre', at: '2026-01-01T00:00:00.000Z', reason: 'pre-migration' as const, fromVersion: 0,
+      data: { invoices: [early], counters: { 'FA-2026': 8 }, accounts: [], offers: [], expenses: [], creditNotes: [] },
+    }],
+    schemaVersion: SCHEMA_VERSION,
+  } satisfies Store;
+  const warning = describeRollback(store);
+  assert.match(warning, /FA-2026-0009/);
+  assert.match(warning, /FA-2026-0010/);
+  assert.match(warning, /copie/i);
+  assert.match(warning, /ne seront pas redonnés/);
+  const rolled = rollbackMigration(store, '2026-06-01T00:00:00.000Z');
+  assert.equal(rolled.ok, true);
+  if (!rolled.ok) return;
+  assert.deepEqual(rolled.store.invoices.map((i) => i.number), ['FA-2026-0008']);
+  const copy = rolled.store.backups.find((b) => b.reason === 'pre-rollback');
+  assert.ok(copy);
+  assert.deepEqual((copy.data.invoices as { number: string }[]).map((i) => i.number), ['FA-2026-0008', 'FA-2026-0009', 'FA-2026-0010']);
+  assert.ok((rolled.store.counters['FA-2026'] ?? 0) >= 10);
+  const next = nextSerial({ prefix: 'FA', year: 2026, numbers: rolled.store.invoices.map((i) => i.number), counters: rolled.store.counters });
+  assert.equal(next.number, 'FA-2026-0011');
+  assert.ok(rolled.store.backups.some((b) => b.id === 'bak-pre'));
+});
+
+test('restauration d’une sauvegarde v2 : le compteur ne passe pas de 10 à 7', () => {
+  const current = {
+    accounts: [],
+    offers: [],
+    invoices: [invoice({ id: 'i10', number: 'FA-2026-0010', status: 'sent', paidAt: undefined })],
+    expenses: [],
+    company: { ...DEFAULT_COMPANY },
+    products: [],
+    counters: { 'FA-2026': 10 },
+    creditNotes: [],
+    audit: [],
+    backups: [],
+    schemaVersion: SCHEMA_VERSION,
+  } satisfies Store;
+  const next = applyRestore(current, {
+    schemaVersion: SCHEMA_VERSION,
+    counters: { 'FA-2026': 7 },
+    invoices: [invoice({ id: 'i7', number: 'FA-2026-0007', status: 'sent', paidAt: undefined })],
+    accounts: [],
+  }, '2026-06-02T00:00:00.000Z');
+  assert.ok((next.counters['FA-2026'] ?? 0) >= 10);
+  const allocated = nextSerial({ prefix: 'FA', year: 2026, numbers: next.invoices.map((i) => i.number), counters: next.counters });
+  assert.equal(allocated.number, 'FA-2026-0011');
+});
+
+test('migration : sauvegarde confirmée avant schemaVersion, échecs sans avancer le schéma', async () => {
+  const rawInvoices = JSON.stringify([invoice({ id: 'i-real', number: 'FA-2025-014' })]);
+  const rawAccounts = JSON.stringify([account({ id: 'a-real', nom: 'Café du Lac' })]);
+  const base = { invoices: rawInvoices, accounts: rawAccounts, counters: JSON.stringify({ 'FA-2025': 10 }) };
+
+  const successOrder: string[] = [];
+  const successData: Record<string, string> = { ...base };
+  const success = await loadAndMigrate({
+    async get(key) { return successData[key] ?? null; },
+    async set(key, value) { successOrder.push(key); successData[key] = value; },
+  }, '2026-04-01T00:00:00.000Z');
+  assert.ok(!('error' in success));
+  assert.ok(successOrder.indexOf('backups') >= 0);
+  assert.ok(successOrder.indexOf('backups') < successOrder.indexOf('schemaVersion'));
+  assert.equal(successOrder[successOrder.length - 1], 'schemaVersion');
+  assert.equal(successData.invoices, rawInvoices);
+
+  const quotaOrder: string[] = [];
+  const quotaData: Record<string, string> = { ...base };
+  const quota = await loadAndMigrate({
+    async get(key) { return quotaData[key] ?? null; },
+    async set(key, value) {
+      quotaOrder.push(key);
+      if (key === 'schemaVersion') throw new Error('quota');
+      quotaData[key] = value;
+    },
+  }, '2026-04-01T00:00:00.000Z');
+  assert.ok('error' in quota);
+  assert.equal(quotaData.schemaVersion, undefined);
+  assert.ok(JSON.parse(quotaData.backups).some((b: { reason: string }) => b.reason === 'pre-migration'));
+  assert.equal(quotaData.invoices, rawInvoices);
+
+  const fullOrder: string[] = [];
+  const fullData: Record<string, string> = { ...base };
+  const full = await loadAndMigrate({
+    async get(key) { return fullData[key] ?? null; },
+    async set(key) {
+      fullOrder.push(key);
+      if (key === 'backups') throw new Error('plein');
+    },
+  }, '2026-04-01T00:00:00.000Z');
+  assert.ok('error' in full);
+  assert.deepEqual(fullOrder, ['backups']);
+  assert.equal(fullData.schemaVersion, undefined);
+  assert.equal(fullData.invoices, rawInvoices);
+
+  let hideBackup = false;
+  const hiddenOrder: string[] = [];
+  const hiddenData: Record<string, string> = { ...base };
+  const hidden = await loadAndMigrate({
+    async get(key) {
+      if (key === 'backups' && hideBackup) return null;
+      return hiddenData[key] ?? null;
+    },
+    async set(key, value) {
+      hiddenOrder.push(key);
+      if (key === 'backups') hideBackup = true;
+      hiddenData[key] = value;
+    },
+  }, '2026-04-01T00:00:00.000Z');
+  assert.ok('error' in hidden);
+  assert.deepEqual(hiddenOrder, ['backups']);
+  assert.equal(hiddenData.schemaVersion, undefined);
+});
+
+test('deux chargements ne migrent pas en même temps', async () => {
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const data: Record<string, string> = { invoices: JSON.stringify([invoice({ id: 'i-real', number: 'FA-2025-014' })]) };
+  const kv = {
+    async get(key: string) {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      inFlight -= 1;
+      return data[key] ?? null;
+    },
+    async set(key: string, value: string) { data[key] = value; },
+  };
+  await Promise.all([
+    loadAndMigrate(kv, '2026-04-01T00:00:00.000Z'),
+    loadAndMigrate(kv, '2026-04-01T00:00:00.000Z'),
+  ]);
+  assert.equal(maxInFlight, 1);
+  assert.equal(data.invoices, JSON.stringify([invoice({ id: 'i-real', number: 'FA-2025-014' })]));
+});
+
+test('réinitialisation, statut émis et purge des sauvegardes', () => {
+  const store = {
+    accounts: [account({ id: 'a-real', nom: 'Café du Lac' })],
+    offers: [],
+    invoices: [invoice({ id: 'i10', number: 'FA-2026-0010', status: 'sent', paidAt: undefined })],
+    expenses: [],
+    company: { ...DEFAULT_COMPANY },
+    products: [],
+    counters: { 'FA-2026': 10 },
+    creditNotes: [],
+    audit: [],
+    backups: [
+      { id: 'old-pre', at: '2026-01-01T00:00:00.000Z', reason: 'pre-migration' as const, fromVersion: 0, data: { invoices: [] } },
+      ...['b1', 'b2', 'b3', 'b4'].map((id, i) => ({ id, at: `2026-02-0${i + 1}T00:00:00.000Z`, reason: 'manual' as const, fromVersion: 2, data: {} })),
+    ],
+    schemaVersion: SCHEMA_VERSION,
+  } satisfies Store;
+  const reset = applyReset(store, '2026-06-03T00:00:00.000Z');
+  assert.equal(reset.counters['FA-2026'], 10);
+  assert.equal(reset.invoices.length, 0);
+  assert.ok(reset.backups.some((b) => b.id === 'old-pre'));
+  assert.ok(reset.backups.length <= 4);
+  assert.equal(coerceInvoiceStatus('sent', 'draft'), 'sent');
+  assert.equal(coerceInvoiceStatus('issued', 'draft'), 'issued');
+  assert.equal(coerceInvoiceStatus('draft', 'issued'), 'issued');
+  const pruned = pruneBackups(store.backups);
+  assert.ok(pruned.some((b) => b.id === 'old-pre'));
+  assert.ok(pruned.length >= 3);
+  assert.ok(pruned.length < store.backups.length);
 });
 
 test('schéma déjà à jour : migration sans nouveau snapshot', () => {

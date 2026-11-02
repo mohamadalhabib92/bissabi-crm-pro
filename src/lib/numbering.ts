@@ -57,6 +57,29 @@ export function nextSerial(opts: {
   return { number: candidate, counters: next };
 }
 
+/**
+ * Ne baisse jamais un compteur : max(actuel, fichier ou snapshot, plus haut numéro présent).
+ * Les numéros des deux jeux de documents comptent, même si l’un va quitter la liste active.
+ */
+export function mergeCounters(input: {
+  current: Record<string, number>;
+  incoming: Record<string, number>;
+  invoices: string[];
+  offers: string[];
+  creditNotes: string[];
+}): Record<string, number> {
+  const base: Record<string, number> = { ...input.current };
+  for (const [key, value] of Object.entries(input.incoming)) {
+    if (typeof value === 'number' && Number.isFinite(value)) base[key] = Math.max(base[key] ?? 0, value);
+  }
+  return raiseCounters({
+    invoices: input.invoices,
+    offers: input.offers,
+    creditNotes: input.creditNotes,
+    counters: base,
+  });
+}
+
 /** Hausse le compteur jusqu’au dernier numéro connu. Ne diminue jamais une clé. */
 export function raiseCounters(input: {
   invoices: string[];
