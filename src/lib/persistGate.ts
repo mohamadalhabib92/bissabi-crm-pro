@@ -1,0 +1,54 @@
+import { STORE_KEYS, type Kv, type StoreKey } from './migrate';
+
+/**
+ * Aucune clé métier n’est écrite tant que le stockage local n’a pas été lu avec succès.
+ * Le repli « Réessayer » / « Continuer hors ligne » ne lève pas cette barrière :
+ * un état vide (premier rendu, timeout) ne peut pas écraser les données déjà présentes.
+ */
+let hydrated = false;
+
+const BUSINESS = new Set<string>(STORE_KEYS);
+
+export function storageHydrated(): boolean {
+  return hydrated;
+}
+
+/** Uniquement après une lecture réussie. Jamais depuis un timeout ou un bouton de repli. */
+export function markStorageHydrated(): void {
+  hydrated = true;
+}
+
+export function resetHydrationForTests(): void {
+  hydrated = false;
+}
+
+/**
+ * Action du repli de chargement (Réessayer, ou « Continuer hors ligne »).
+ * Relance la lecture. N’hydrate pas et n’écrit rien.
+ */
+export function continueOffline(): void {
+  // volontairement vide : ne pas passer hydrated à true
+}
+
+export function canPersistBusinessKey(key: string): boolean {
+  return !BUSINESS.has(key) || hydrated;
+}
+
+/** `keyLoaded` est faux au premier rendu, avant la lecture de cette clé. */
+export function shouldPersist(keyLoaded: boolean, key: string): boolean {
+  return keyLoaded && canPersistBusinessKey(key);
+}
+
+/** Point de passage unique des écritures métier. Retourne false sans toucher au stockage si la lecture n’a pas abouti. */
+export async function commitIfHydrated(kv: Kv, entries: { key: string; value: string }[]): Promise<boolean> {
+  if (!hydrated) return false;
+  for (const entry of entries) {
+    if (!BUSINESS.has(entry.key)) continue;
+    await kv.set(entry.key, entry.value);
+  }
+  return true;
+}
+
+export function isBusinessKey(key: string): key is StoreKey {
+  return BUSINESS.has(key);
+}

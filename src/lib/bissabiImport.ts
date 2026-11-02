@@ -1,9 +1,9 @@
 import { ACCOUNT_HEADERS, importAccounts } from './accountsCsv';
-import { parseCSV } from './download';
+import { parseCSV } from './csv';
 import { norm, parseAmount, parseDate } from './format';
 import { isPlaceholderIban, isValidIban } from './iban';
 import type { Account, Company, Expense, Invoice, InvoiceStatus, Product } from './model';
-import { uid } from './storage';
+import { uid } from './uid';
 
 /**
  * Import « Données Bissabi » — idempotent.
@@ -56,7 +56,10 @@ function rowsAsObjects(text: string): Record<string, string>[] {
   return rows.slice(1).map((r) => Object.fromEntries(head.map((h, i) => [h, (r[i] ?? '').trim()])));
 }
 
-const STATUS: Record<string, InvoiceStatus> = { brouillon: 'draft', envoyee: 'sent', payee: 'paid', annulee: 'cancelled', draft: 'draft', sent: 'sent', paid: 'paid', cancelled: 'cancelled' };
+const STATUS: Record<string, InvoiceStatus> = {
+  brouillon: 'draft', emise: 'issued', envoyee: 'sent', partiellementpayee: 'partial', payee: 'paid', annulee: 'cancelled',
+  draft: 'draft', issued: 'issued', sent: 'sent', partial: 'partial', paid: 'paid', cancelled: 'cancelled',
+};
 const accKey = (nom: string, ville: string) => 'acc:' + norm(nom) + '|' + norm(ville);
 
 export function applyBissabiImport(state: ImportState, files: { name: string; text: string }[]): { next: ImportState; report: ImportReport } {

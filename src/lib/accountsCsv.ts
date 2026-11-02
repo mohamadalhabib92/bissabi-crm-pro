@@ -1,6 +1,6 @@
 import { norm, parseDate } from './format';
 import { CANTONS, DELIVERY_CANTON, OUT_OF_ZONE, STAGES, type Account, type Stage } from './model';
-import { parseCSV, toCSV } from './download';
+import { parseCSV, toCSV } from './csv';
 
 /** En-têtes EXACTS imposés (séparateur « ; »). */
 export const ACCOUNT_HEADERS = [

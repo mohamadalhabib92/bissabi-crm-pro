@@ -11,7 +11,7 @@ Expo / React Native (iOS, Android) + PWA installable. **Fonctionne entièrement 
 - **Hors Vaud** : `livraison_ok=false` + avertissement « hors zone livraison actuelle » (non bloquant).
 - **Offres** : création, duplication, envoi (PDF + brouillon e-mail), acceptée / refusée, conversion en facture.
 - **Factures** : TVA **Oui / Non** par facture (taux 8.1 / 2.6 / 3.8 / 0 %). « Non » → mention « TVA non applicable ».
-- **QR-facture suisse** (SPC 0200, référence SCOR/RF ou QRR si QR-IBAN) : QR ≈ 3,5 cm, « Scannez pour payer (TWINT / e-banking) », créancier = la société. Logo vert sur les documents.
+- **QR-facture suisse** (SPC 0200, référence SCOR/RF ou QRR si QR-IBAN) : QR 46 × 46 mm, croix 7 × 7 mm, récépissé 62 mm et section paiement 148 mm. Libellé « Scannez pour payer (TWINT / e-banking) » hors de la section normalisée. SPÉCIMEN tant que l’IBAN n’est pas valide. Logo vert sur les documents.
 - **Message de remerciement adaptatif** (HORECA / autre) au paiement.
 - **Dépenses** : catégories, justificatif (photo / PDF), filtre période, total, export CSV.
 - **CSV TVA** : n° facture, date, client, HT, taux, montant TVA, TTC, TVA Oui/Non.
@@ -43,7 +43,8 @@ Servie sous `/bissabi-crm-pro` (`experiments.baseUrl`). `.github/workflows/pages
 Copier `.env.example` vers `.env`. Seule `EXPO_PUBLIC_BACKEND_URL` est lue par l'app ; `BETTER_AUTH_SECRET`, `DATABASE_URL`, `WIX_SITE_ID`, `WIX_SITE_URL` restent **côté serveur**. Toutes les valeurs sont des `YOUR_*` à remplacer.
 
 ## Limites connues
-- Logo vert provisoire (wordmark) : remplacer `src/lib/logo.ts` par le logo officiel.
-- QR imprimé à 35 mm (demande ≈ 3,5 cm) ; la norme SIX prévoit 46 × 46 mm : vérifier avec votre banque avant usage réel.
-- Pas de synchronisation multi-appareils sans backend ; sauvegarde via export JSON.
+- Logo vert provisoire (wordmark, YOUR_LOGO_GREEN) : remplacer `src/lib/logo.ts` par le logo officiel.
+- QR-facture en SPÉCIMEN tant que l’IBAN des Réglages n’est pas un IBAN valide. Le numéro TVA (YOUR_VAT_NUMBER) n’est pas imprimé. Assujettissement : à valider.
+- Pas de synchronisation multi-appareils sans backend. Sauvegarde JSON, CSV hors démo, et fichier chiffré (phrase secrète locale).
+- Conserver `EXPO_NO_CAPABILITY_SYNC=1` et l’équipe Apple `Y9XF9RY2BU`. Ne pas modifier le bundle ID ni `experiments.baseUrl`.
 - PDF et e-mails en français uniquement.
