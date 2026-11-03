@@ -115,7 +115,7 @@ export function Button({
   accessibilityLabel?: string;
 }) {
   const bg = { primary: t.primary, secondary: t.surfaceAlt, ghost: 'transparent', danger: t.danger }[variant];
-  const fg = { primary: t.onPrimary, secondary: t.text, ghost: t.primary, danger: '#fff' }[variant];
+  const fg = { primary: t.onPrimary, secondary: t.text, ghost: t.primary, danger: t.onDanger }[variant];
   const off = disabled || loading;
   return (
     <Pressable
@@ -172,7 +172,7 @@ export function Chip({ label, active, onPress, color }: { label: string; active?
         pressed && { opacity: 0.8 },
       ]}
     >
-      <Text style={{ color: active ? (color ? '#fff' : t.onPrimary) : t.text, fontWeight: '600', fontSize: 14 }}>{label}</Text>
+      <Text style={{ color: active ? t.onPrimary : t.text, fontWeight: '600', fontSize: 14 }}>{label}</Text>
     </Pressable>
   );
 }
@@ -257,7 +257,7 @@ export function Empty({ icon = 'sparkles-outline', title, text, action }: { icon
   return (
     <View style={styles.empty}>
       <View style={styles.emptyIcon}>
-        <Ionicons name={icon} size={28} color={t.accent} />
+        <Ionicons name={icon} size={28} color={t.primary} />
       </View>
       <Text style={[styles.h2, { textAlign: 'center', marginBottom: 6 }]}>{title}</Text>
       {text ? <Muted style={{ textAlign: 'center', marginBottom: 14 }}>{text}</Muted> : null}
@@ -318,7 +318,7 @@ export function Stat({ label, value, sub }: { label: string; value: string; sub?
   return (
     <View style={[styles.card, { flex: 1, minWidth: 140, marginBottom: 0 }]}>
       <Muted style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.8 }}>{label}</Muted>
-      <Text style={{ color: t.text, fontSize: 22, fontWeight: '700', marginTop: 4 }}>{value}</Text>
+      <Text style={{ color: t.text, fontSize: 22, fontWeight: '700', marginTop: 4, fontVariant: ['tabular-nums'] }}>{value}</Text>
       {sub ? <Muted style={{ fontSize: 12, marginTop: 2 }}>{sub}</Muted> : null}
     </View>
   );
@@ -337,7 +337,7 @@ export function DemoBanner({ text }: { text: string }) {
 export function shadow(level = 1): ViewStyle {
   if (Platform.OS === 'android') return { elevation: level * 2 };
   return {
-    shadowColor: '#000',
+    shadowColor: t.shadow,
     shadowOpacity: 0.06 * level,
     shadowRadius: 8 * level,
     shadowOffset: { width: 0, height: 2 * level },
@@ -351,7 +351,7 @@ export const styles = StyleSheet.create({
   h2: { color: t.text, fontSize: 18, fontWeight: '700', letterSpacing: -0.2, marginBottom: 8 },
   body: { color: t.text, fontSize: 16, lineHeight: 23 },
   muted: { color: t.muted, fontSize: 15, lineHeight: 21 },
-  eyebrow: { color: t.accent, fontSize: 12, fontWeight: '700', letterSpacing: 1.6, textTransform: 'uppercase', marginBottom: 6 },
+  eyebrow: { color: t.primary, fontSize: 12, fontWeight: '700', letterSpacing: 1.6, textTransform: 'uppercase', marginBottom: 6, borderBottomWidth: 2, borderBottomColor: t.accent, alignSelf: 'flex-start', paddingBottom: 2 },
   card: {
     backgroundColor: t.surface,
     borderRadius: t.radius,
@@ -390,7 +390,7 @@ export const styles = StyleSheet.create({
   segment: { flexDirection: 'row', backgroundColor: t.surfaceAlt, borderRadius: t.radius - 2, padding: 4, gap: 4 },
   segItem: { flex: 1, minHeight: 44, borderRadius: t.radius - 4, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
   track: { width: 50, height: 30, borderRadius: 15, padding: 3, justifyContent: 'center' },
-  thumb: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#fff', ...shadow(1) },
+  thumb: { width: 24, height: 24, borderRadius: 12, backgroundColor: t.qrPaper, ...shadow(1) },
   empty: { alignItems: 'center', padding: 28, borderRadius: t.radius, borderWidth: 1, borderStyle: 'dashed', borderColor: t.border, marginBottom: 12 },
   emptyIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: t.surfaceAlt, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   notice: { flexDirection: 'row', gap: 10, padding: 12, borderRadius: t.radius - 4, marginBottom: 12 },

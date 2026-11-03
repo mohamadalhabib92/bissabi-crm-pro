@@ -9,7 +9,7 @@ import { useData } from '@/lib/data';
 import { invoiceHtml, mailto, thankYou } from '@/lib/documents';
 import { addDays, chf, dateCH, parseDate, todayISO } from '@/lib/format';
 import { formatIban, isPlaceholderIban } from '@/lib/iban';
-import { INVOICE_STATUS, isHoreca, totals, type Invoice } from '@/lib/model';
+import { INVOICE_STATUS, isHoreca, isOpenStatus, totals, type Invoice } from '@/lib/model';
 import { printHtml } from '@/lib/print';
 import { buildQrBill } from '@/lib/qrbill';
 import { uid } from '@/lib/storage';
@@ -18,7 +18,7 @@ import { theme as t } from '@/ui/theme';
 
 export default function InvoiceScreen() {
   const { id, accountId } = useLocalSearchParams<{ id: string; accountId?: string }>();
-  const { invoices, setInvoices, accounts, company, nextNumber } = useData();
+  const { invoices, accounts, company, saveInvoice, deleteDraftInvoice, cancelInvoiceWithCredit, creditNotes } = useData();
   const router = useRouter();
   const nav = useNavigation();
   const existing = invoices.find((i) => i.id === id);
@@ -34,7 +34,8 @@ export default function InvoiceScreen() {
   const [thanks, setThanks] = useState<string | null>(null);
   useEffect(() => nav.setOptions({ title: inv.number ? `Facture ${inv.number}` : 'Nouvelle facture' }), [nav, inv.number]);
   const acc = accounts.find((a) => a.id === inv.accountId);
-  const locked = inv.status === 'paid' || inv.status === 'cancelled';
+  const locked = inv.status !== 'draft';
+  const credit = creditNotes.find((c) => c.id === inv.creditNoteId);
   const tt = totals(inv.lines, inv.vat);
   const qb = useMemo(() => buildQrBill(company, acc, { ...inv, number: inv.number || 'BROUILLON' }, tt.ttc), [company, acc, inv, tt.ttc]);
 
@@ -45,14 +46,14 @@ export default function InvoiceScreen() {
     const due = parseDate(dueTxt);
     if (!d || !due) return setErr('Dates invalides (JJ.MM.AAAA).'), null;
     setErr('');
-    const rec: Invoice = { ...inv, ...patch, date: d, dueDate: due, number: inv.number || nextNumber('FA'), lines: inv.lines.filter((l) => l.description.trim()) };
-    setInvoices((l) => (l.some((x) => x.id === rec.id) ? l.map((x) => (x.id === rec.id ? rec : x)) : [rec, ...l]));
-    setInv(rec);
-    return rec;
+    const rec: Invoice = { ...inv, ...patch, date: d, dueDate: due, lines: inv.lines.filter((l) => l.description.trim()) };
+    const saved = saveInvoice(rec);
+    setInv(saved);
+    return saved;
   };
   const print = (r: Invoice | null) => r && void printHtml(invoiceHtml(company, acc, r));
   const send = () => {
-    const r = persist({ status: inv.status === 'draft' ? 'sent' : inv.status });
+    const r = persist({ status: inv.status === 'draft' || inv.status === 'issued' ? 'sent' : inv.status });
     if (!r) return;
     print(r);
     if (acc?.contact_email) void Linking.openURL(mailto(acc.contact_email, `Facture ${r.number} — Bissabi`, thankYou(acc, 'invoice')));
@@ -62,19 +63,29 @@ export default function InvoiceScreen() {
     if (r) setThanks(thankYou(acc, 'paid'));
   };
   const duplicate = () => {
-    const copy: Invoice = { ...inv, id: uid('fa_'), number: nextNumber('FA'), date: todayISO(), dueDate: addDays(todayISO(), company.paymentDays || 30), status: 'draft', paidAt: undefined, offerId: undefined, demo: undefined, lines: inv.lines.map((l) => ({ ...l, id: uid('l') })) };
-    setInvoices((l) => [copy, ...l]);
+    const copy: Invoice = {
+      ...inv, id: uid('fa_'), number: '', date: todayISO(), dueDate: addDays(todayISO(), company.paymentDays || 30),
+      status: 'draft', paidAt: undefined, issuedAt: undefined, creditNoteId: undefined, offerId: undefined,
+      demo: inv.demo === true ? true : undefined, lines: inv.lines.map((l) => ({ ...l, id: uid('l') })),
+    };
+    saveInvoice(copy);
     router.replace({ pathname: '/invoice/[id]', params: { id: copy.id } });
   };
+  const cancel = () => confirmAsk('Annuler par un avoir ?', 'La facture reste conservée, avec le statut « Annulée ». Un avoir est créé. Le numéro n’est pas réutilisé.', () => {
+    const creditId = cancelInvoiceWithCredit(inv.id);
+    if (!creditId) return;
+    setInv((prev) => ({ ...prev, status: 'cancelled', creditNoteId: creditId }));
+    router.push({ pathname: '/credit/[id]', params: { id: creditId } });
+  });
 
   return (
     <Screen>
       {inv.demo ? <DemoBanner text="Facture d’exemple — non réelle." /> : null}
       <Row style={{ justifyContent: 'space-between' }}>
         <H2>{inv.number || 'Brouillon'}</H2>
-        <Badge label={INVOICE_STATUS[inv.status]} tone={inv.status === 'paid' ? 'success' : inv.status === 'cancelled' ? 'danger' : inv.status === 'sent' ? 'info' : 'neutral'} />
+        <Badge label={isOpenStatus(inv.status) && inv.dueDate < todayISO() ? 'En retard' : INVOICE_STATUS[inv.status]} tone={inv.status === 'paid' ? 'success' : inv.status === 'cancelled' ? 'danger' : inv.status === 'partial' ? 'warning' : isOpenStatus(inv.status) ? 'info' : 'neutral'} />
       </Row>
-      {locked ? <Notice tone={inv.status === 'paid' ? 'success' : 'danger'} title={inv.status === 'paid' ? `Payée le ${dateCH(inv.paidAt)}` : 'Facture annulée'} text="Document verrouillé. Dupliquez-la pour en créer une nouvelle." /> : null}
+      {locked ? <Notice tone={inv.status === 'paid' ? 'success' : inv.status === 'cancelled' ? 'danger' : 'info'} title={inv.status === 'paid' ? `Payée le ${dateCH(inv.paidAt)}` : inv.status === 'cancelled' ? `Annulée${credit ? ` · avoir ${credit.number}` : ''}` : 'Facture émise'} text="Le numéro et le contenu sont figés. Une correction passe par un avoir, puis une nouvelle facture." /> : null}
       <AccountPicker value={inv.accountId} onChange={(v) => !locked && setInv({ ...inv, accountId: v })} />
       <Spacer />
       <Row>
@@ -100,21 +111,23 @@ export default function InvoiceScreen() {
         {qb.ibanStatus !== 'ok' ? (
           <Notice tone="warning" title={qb.ibanStatus === 'placeholder' ? 'SPÉCIMEN — IBAN non configuré' : 'SPÉCIMEN — IBAN invalide'} text="Renseignez l’IBAN réel de Bissabi dans Réglages société. Aucun IBAN n’est inventé par l’app." />
         ) : null}
-        <Muted style={{ fontSize: 12, marginTop: 6 }}>Sur le PDF, le QR mesure ≈ 3,5 cm, avec récépissé et section paiement.</Muted>
+        <Muted style={{ fontSize: 12, marginTop: 6 }}>Sur le PDF, le QR mesure 46 × 46 mm (croix 7 × 7 mm), avec récépissé 62 mm et section paiement 148 mm. L’aperçu écran est plus petit.</Muted>
       </Card>
       {err ? <Notice tone="danger" title={err} /> : null}
       <Spacer />
       <Row wrap>
-        {!locked ? <Button title="Enregistrer" icon="checkmark" onPress={() => persist() && router.back()} /> : null}
+        {!locked ? <Button title="Enregistrer le brouillon" icon="checkmark" onPress={() => persist() && router.back()} /> : null}
+        {!locked ? <Button variant="secondary" icon="checkmark-circle-outline" title="Émettre" onPress={() => { const r = persist({ status: 'issued' }); if (r) setInv(r); }} /> : null}
         <Button variant="secondary" icon="print-outline" title="PDF / imprimer" onPress={() => print(locked ? inv : persist())} />
         {!locked ? <Button variant="secondary" icon="paper-plane-outline" title="Envoyer" onPress={send} /> : null}
       </Row>
       <Spacer h={8} />
       <Row wrap>
-        {inv.status === 'sent' ? <Button small icon="checkmark-done-outline" title="Marquer payée" onPress={markPaid} /> : null}
-        {inv.number ? <Button small variant="ghost" icon="copy-outline" title="Dupliquer" onPress={duplicate} /> : null}
-        {inv.status === 'sent' ? <Button small variant="ghost" icon="close-circle-outline" title="Annuler la facture" onPress={() => confirmAsk('Annuler la facture ?', 'Elle restera visible avec le statut « Annulée ».', () => persist({ status: 'cancelled' }))} /> : null}
-        {inv.status === 'draft' && existing ? <Button small variant="danger" icon="trash-outline" title="Supprimer le brouillon" onPress={() => confirmAsk('Supprimer ce brouillon ?', inv.number, () => { setInvoices((l) => l.filter((x) => x.id !== inv.id)); router.back(); })} /> : null}
+        {isOpenStatus(inv.status) ? <Button small icon="checkmark-done-outline" title="Marquer payée" onPress={markPaid} /> : null}
+        <Button small variant="ghost" icon="copy-outline" title="Dupliquer" onPress={duplicate} />
+        {inv.status !== 'draft' && inv.status !== 'cancelled' ? <Button small variant="ghost" icon="close-circle-outline" title="Annuler par un avoir" onPress={cancel} /> : null}
+        {credit ? <Button small variant="secondary" icon="receipt-outline" title={`Avoir ${credit.number}`} onPress={() => router.push({ pathname: '/credit/[id]', params: { id: credit.id } })} /> : null}
+        {inv.status === 'draft' && existing ? <Button small variant="danger" icon="trash-outline" title="Supprimer le brouillon" onPress={() => confirmAsk('Supprimer ce brouillon ?', inv.number ? `${inv.number} — ce numéro ne sera pas réutilisé.` : 'Brouillon sans numéro.', () => { if (deleteDraftInvoice(inv.id)) router.back(); })} /> : null}
       </Row>
       {thanks || inv.status === 'paid' ? (
         <>

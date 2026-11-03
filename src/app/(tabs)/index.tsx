@@ -5,7 +5,7 @@ import { useData } from '@/lib/data';
 import { downloadText } from '@/lib/download';
 import { chf, dateCH, todayISO } from '@/lib/format';
 import { isPlaceholderIban } from '@/lib/iban';
-import { stageLabel, totals } from '@/lib/model';
+import { isDemo, isOpenStatus, stageLabel, totals } from '@/lib/model';
 import { inPeriod, PERIODS, type Period } from '@/lib/period';
 import { vatCSV } from '@/lib/vatExport';
 import { Badge, Button, Card, DemoBanner, Divider, Eyebrow, H1, H2, ListItem, Muted, Notice, Row, Screen, Segmented, Spacer, Stat } from '@/ui/kit';
@@ -15,13 +15,15 @@ export default function Dashboard() {
   const { invoices, expenses, accounts, company, hasDemo, removeDemo } = useData();
   const router = useRouter();
   const [p, setP] = useState<Period>('month');
+  const realInvoices = useMemo(() => invoices.filter((i) => !isDemo(i)), [invoices]);
+  const realExpenses = useMemo(() => expenses.filter((e) => !isDemo(e)), [expenses]);
   const k = useMemo(() => {
-    const issued = invoices.filter((i) => i.status !== 'draft' && i.status !== 'cancelled');
+    const issued = realInvoices.filter((i) => i.status !== 'draft' && i.status !== 'cancelled');
     const inP = issued.filter((i) => inPeriod(i.date, p));
     const ca = inP.reduce((s, i) => s + totals(i.lines, i.vat).ht, 0);
     const cash = issued.filter((i) => i.status === 'paid' && inPeriod(i.paidAt, p)).reduce((s, i) => s + totals(i.lines, i.vat).ttc, 0);
-    const open = inP.filter((i) => i.status === 'sent').reduce((s, i) => s + totals(i.lines, i.vat).ttc, 0);
-    const exp = expenses.filter((e) => inPeriod(e.date, p));
+    const open = inP.filter((i) => isOpenStatus(i.status)).reduce((s, i) => s + totals(i.lines, i.vat).ttc, 0);
+    const exp = realExpenses.filter((e) => inPeriod(e.date, p));
     const expTTC = exp.reduce((s, e) => s + e.amountTTC, 0);
     const expHT = exp.reduce((s, e) => s + e.amountTTC - (e.vatAmount || 0), 0);
     const vat = new Map<number, { base: number; tva: number }>();
@@ -30,10 +32,10 @@ export default function Dashboard() {
       const cur = vat.get(i.vat.rate) ?? { base: 0, tva: 0 };
       vat.set(i.vat.rate, { base: cur.base + tt.ht, tva: cur.tva + tt.tva });
     });
-    const overdue = issued.filter((i) => i.status === 'sent' && i.dueDate < todayISO());
+    const overdue = issued.filter((i) => isOpenStatus(i.status) && i.dueDate < todayISO());
     return { ca, cash, open, expTTC, margin: ca - expHT, vat: [...vat.entries()].sort((a, b) => b[0] - a[0]), overdue, count: inP.length, noVat: inP.filter((i) => !i.vat.apply).length };
-  }, [invoices, expenses, p]);
-  const actions = accounts.filter((a) => a.prochaine_action && a.prochaine_action_date).sort((a, b) => a.prochaine_action_date.localeCompare(b.prochaine_action_date)).slice(0, 5);
+  }, [realInvoices, realExpenses, p]);
+  const actions = accounts.filter((a) => !isDemo(a) && a.prochaine_action && a.prochaine_action_date).sort((a, b) => a.prochaine_action_date.localeCompare(b.prochaine_action_date)).slice(0, 5);
 
   return (
     <Screen>
@@ -57,7 +59,7 @@ export default function Dashboard() {
       </Row>
       <Spacer h={10} />
       <Row wrap gap={10}>
-        <Stat label="Ouvert" value={chf(k.open)} sub="Envoyé, non payé" />
+        <Stat label="Ouvert" value={chf(k.open)} sub="Émise ou envoyée, non payée" />
         <Stat label="Dépenses" value={chf(k.expTTC)} sub="TTC sur la période" />
       </Row>
       <Spacer h={10} />
@@ -79,7 +81,7 @@ export default function Dashboard() {
         )}
         {k.noVat ? <Muted style={{ marginTop: 6 }}>{k.noVat} facture(s) « TVA non applicable ».</Muted> : null}
         <Divider />
-        <Button small variant="secondary" icon="download-outline" title="Exporter le CSV TVA" onPress={() => downloadText(`tva-${todayISO()}.csv`, vatCSV(invoices.filter((i) => inPeriod(i.date, p)), accounts))} />
+        <Button small variant="secondary" icon="download-outline" title="Exporter le CSV TVA" onPress={() => downloadText(`tva-${todayISO()}.csv`, vatCSV(realInvoices.filter((i) => inPeriod(i.date, p)), accounts))} />
       </Card>
       <Spacer h={20} />
       <H2>À relancer</H2>

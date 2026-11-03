@@ -1,5 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { Kv } from './migrate';
+import { canPersistBusinessKey, shouldPersist } from './persistGate';
 
 /**
  * Stockage local (AsyncStorage sur mobile, localStorage sur le web).
@@ -7,7 +9,18 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * sans backend ni API payante.
  */
 // Préfixe propre à l'app : plusieurs PWA partagent la même origine sur GitHub Pages.
-const PREFIX = '@bissabi-crm-pro/';
+// Ne jamais modifier cette chaîne : les données déjà installées en dépendent.
+export const STORAGE_PREFIX = '@bissabi-crm-pro/';
+const PREFIX = STORAGE_PREFIX;
+
+export function asyncStorageKv(): Kv {
+  return {
+    get: (key) => AsyncStorage.getItem(PREFIX + key),
+    set: (key, value) => AsyncStorage.setItem(PREFIX + key, value),
+  };
+}
+
+export { uid } from './uid';
 
 export async function loadJSON<T>(key: string, fallback: T): Promise<T> {
   try {
@@ -19,6 +32,7 @@ export async function loadJSON<T>(key: string, fallback: T): Promise<T> {
 }
 
 export async function saveJSON<T>(key: string, value: T): Promise<void> {
+  if (!canPersistBusinessKey(key)) return;
   try {
     await AsyncStorage.setItem(PREFIX + key, JSON.stringify(value));
   } catch {
@@ -27,6 +41,7 @@ export async function saveJSON<T>(key: string, value: T): Promise<void> {
 }
 
 export async function clearAll(): Promise<void> {
+  if (!canPersistBusinessKey('accounts')) return;
   const keys = await AsyncStorage.getAllKeys();
   await AsyncStorage.multiRemove(keys.filter((k) => k.startsWith(PREFIX)));
 }
@@ -45,20 +60,22 @@ export async function exportAll(): Promise<Record<string, unknown>> {
   return out;
 }
 
-/** État React persistant (écriture immédiate à chaque changement). */
+/** État React persistant. Le premier rendu et tout appel avant la lecture ne déclenchent aucune écriture. */
 export function usePersistentState<T>(key: string, initial: T | (() => T)) {
   const [value, setValue] = useState<T>(initial);
   const [ready, setReady] = useState(false);
   const initialRef = useRef(initial);
+  const loaded = useRef(false);
 
   useEffect(() => {
     let alive = true;
+    loaded.current = false;
     const fb = typeof initialRef.current === 'function' ? (initialRef.current as () => T)() : initialRef.current;
     loadJSON<T>(key, fb).then((v) => {
-      if (alive) {
-        setValue(v);
-        setReady(true);
-      }
+      if (!alive) return;
+      setValue(v);
+      loaded.current = true;
+      setReady(true);
     });
     return () => {
       alive = false;
@@ -68,6 +85,7 @@ export function usePersistentState<T>(key: string, initial: T | (() => T)) {
   const set = useCallback(
     (next: T | ((prev: T) => T)) => {
       setValue((prev) => {
+        if (!shouldPersist(loaded.current, key)) return prev;
         const v = typeof next === 'function' ? (next as (p: T) => T)(prev) : next;
         void saveJSON(key, v);
         return v;
@@ -77,8 +95,4 @@ export function usePersistentState<T>(key: string, initial: T | (() => T)) {
   );
 
   return [value, set, ready] as const;
-}
-
-export function uid(prefix = ''): string {
-  return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }

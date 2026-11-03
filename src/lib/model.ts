@@ -64,11 +64,30 @@ export type Offer = {
   status: OfferStatus; notes: string; invoiceId?: string; demo?: boolean;
 };
 
-export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'cancelled';
-export const INVOICE_STATUS: Record<InvoiceStatus, string> = { draft: 'Brouillon', sent: 'Envoyée', paid: 'Payée', cancelled: 'Annulée' };
+export type InvoiceStatus = 'draft' | 'issued' | 'sent' | 'partial' | 'paid' | 'cancelled';
+export const INVOICE_STATUS: Record<InvoiceStatus, string> = {
+  draft: 'Brouillon', issued: 'Émise', sent: 'Envoyée', partial: 'Partiellement payée', paid: 'Payée', cancelled: 'Annulée',
+};
+/** Facture encore due (l’échéance dépassée s’affiche « En retard », sans réécrire le statut). */
+export function isOpenStatus(s: InvoiceStatus): boolean {
+  return s === 'issued' || s === 'sent' || s === 'partial';
+}
+
+/** Une facture déjà émise ne peut pas redevenir un brouillon. */
+export function coerceInvoiceStatus(prev: InvoiceStatus | undefined, requested: InvoiceStatus): InvoiceStatus {
+  if (prev && prev !== 'draft' && requested === 'draft') return prev;
+  return requested;
+}
 export type Invoice = {
   id: string; number: string; accountId: string; date: string; dueDate: string; lines: Line[]; vat: Vat;
-  status: InvoiceStatus; paidAt?: string; offerId?: string; notes: string; demo?: boolean; ext?: string; source?: string;
+  status: InvoiceStatus; paidAt?: string; issuedAt?: string; creditNoteId?: string; offerId?: string; notes: string;
+  demo?: boolean; ext?: string; source?: string;
+};
+
+/** Avoir : annule une facture émise. Le numéro de la facture d’origine n’est jamais réécrit. */
+export type CreditNote = {
+  id: string; number: string; invoiceId: string; invoiceNumber: string; accountId: string; date: string;
+  lines: Line[]; vat: Vat; notes: string; createdAt: string; demo?: boolean;
 };
 
 export const EXPENSE_CATEGORIES = [
@@ -89,6 +108,8 @@ export type Product = {
 export type Company = {
   name: string; street: string; houseNo: string; zip: string; town: string; country: string; uid: string;
   email: string; phone: string; website: string; iban: string; tagline: string; paymentDays: number; vatDefault: boolean; vatRateDefault: VatRate;
+  /** Masqué sur les documents tant que la valeur est absente ou YOUR_*. Assujettissement : à valider. */
+  vatNumber: string;
   lang: 'fr' | 'de' | 'it' | 'en';
 };
 
@@ -104,12 +125,25 @@ export const DEFAULT_COMPANY: Company = {
   phone: '',
   website: '',
   iban: 'YOUR_SWISS_IBAN',
+  vatNumber: 'YOUR_VAT_NUMBER',
   tagline: 'Swiss Premium Botanical Beverage Brand Inspired by the Sahel',
   paymentDays: 30,
   vatDefault: false,
   vatRateDefault: 8.1,
   lang: 'fr',
 };
+
+/** Vrai uniquement pour les fiches d’exemple. Une donnée réelle (flag absent) n’est jamais une démo. */
+export function isDemo(row: { demo?: boolean } | undefined | null): boolean {
+  return row?.demo === true;
+}
+
+/** Numéro TVA imprimable. YOUR_* et vide restent masqués. */
+export function visibleVatNumber(c: { vatNumber?: string }): string | null {
+  const v = (c.vatNumber ?? '').trim();
+  if (!v || v.startsWith('YOUR_')) return null;
+  return v;
+}
 
 /** Totaux : prix saisis HT. TVA Non → aucune ligne TVA, mention « TVA non applicable ». */
 export function totals(lines: Line[], vat: Vat) {

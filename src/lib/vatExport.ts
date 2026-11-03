@@ -1,5 +1,5 @@
-import { toCSV } from './download';
-import { totals, type Account, type Invoice } from './model';
+import { toCSV } from './csv';
+import { isDemo, totals, type Account, type Invoice } from './model';
 
 /** Export CSV TVA : n° facture, date, client, HT, taux, montant TVA, TTC, TVA Oui/Non (factures non annulées, hors brouillons). */
 export function vatCSV(invoices: Invoice[], accounts: Account[]) {
@@ -8,7 +8,7 @@ export function vatCSV(invoices: Invoice[], accounts: Account[]) {
   return toCSV([
     ['n° facture', 'date', 'client', 'HT', 'taux', 'montant TVA', 'TTC', 'TVA Oui/Non'],
     ...invoices
-      .filter((i) => i.status !== 'cancelled' && i.status !== 'draft')
+      .filter((i) => !isDemo(i) && i.status !== 'cancelled' && i.status !== 'draft')
       .sort((a, b) => a.date.localeCompare(b.date))
       .map((i) => {
         const t = totals(i.lines, i.vat);

@@ -1,17 +1,14 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Text } from 'react-native';
 import { SvgXml } from 'react-native-svg';
 import { BACKEND_URL } from '@/lib/backend';
 import { confirmAsk } from '@/lib/confirm';
 import { useData } from '@/lib/data';
 import { formatIban, isPlaceholderIban, isQrIban, isValidIban } from '@/lib/iban';
 import { GREEN_LOGO_SVG } from '@/lib/logo';
-import { VAT_RATES, type Company } from '@/lib/model';
-import { clearAll, exportAll } from '@/lib/storage';
-import { downloadText } from '@/lib/download';
-import { todayISO } from '@/lib/format';
+import { VAT_RATES, visibleVatNumber, type Company } from '@/lib/model';
 import { Button, Card, Field, H2, ListItem, Muted, Notice, Row, Screen, Segmented, Spacer, Toggle } from '@/ui/kit';
+import { SafetyPanel } from '@/ui/SafetyPanel';
 import { theme as t } from '@/ui/theme';
 import { BissabiImportButton } from '@/ui/BissabiImport';
 import { chf } from '@/lib/format';
@@ -62,6 +59,13 @@ export default function Settings() {
       />
       {ibanState !== 'ok' ? <Notice tone="warning" title="QR-factures en mode SPÉCIMEN" text="Saisissez l’IBAN réel de la société. L’app n’invente jamais d’IBAN." /> : null}
       <Field label="Délai de paiement (jours)" value={String(c.paymentDays)} onChangeText={(v) => set({ paymentDays: Math.max(0, Math.min(120, parseInt(v.replace(/\D/g, '') || '0', 10))) })} keyboardType="number-pad" />
+      <Field
+        label="Numéro TVA (masqué sur les documents)"
+        value={c.vatNumber}
+        onChangeText={(v) => set({ vatNumber: v })}
+        autoCapitalize="characters"
+        hint={visibleVatNumber(c) ? 'Imprimé sur les documents.' : 'YOUR_VAT_NUMBER — rien n’est imprimé. Assujettissement : à valider.'}
+      />
       <Toggle label="TVA appliquée par défaut" value={c.vatDefault} onChange={(v) => set({ vatDefault: v })} hint="Modifiable facture par facture (Oui / Non)" />
       <Segmented label="Taux par défaut" options={VAT_RATES.map((r) => ({ label: `${r} %`, value: r }))} value={c.vatRateDefault} onChange={(v) => set({ vatRateDefault: v })} />
 
@@ -93,10 +97,10 @@ export default function Settings() {
       <H2>Données</H2>
       <Card>
         <ListItem icon="server-outline" title="Backend / configuration" subtitle={BACKEND_URL ? `Synchronisation : ${BACKEND_URL}` : 'Mode local (hors ligne) — aucune clé requise'} onPress={() => router.push('/config')} />
-        <ListItem icon="download-outline" title="Exporter toutes les données (JSON)" onPress={async () => downloadText(`bissabi-crm-${todayISO()}.json`, JSON.stringify(await exportAll(), null, 2), 'application/json')} />
-        {hasDemo ? <ListItem icon="sparkles-outline" title="Supprimer les données de démonstration" onPress={() => confirmAsk('Supprimer les données démo ?', 'Seuls les éléments marqués « démo » sont supprimés.', removeDemo)} /> : null}
-        <ListItem icon="trash-outline" title="Réinitialiser l’application" subtitle="Efface toutes les données locales" onPress={() => confirmAsk('Tout effacer ?', 'Action irréversible. Exportez d’abord vos données.', async () => { await clearAll(); if (typeof window !== 'undefined' && window.location) window.location.reload(); })} />
+        {hasDemo ? <ListItem icon="sparkles-outline" title="Supprimer les données de démonstration" onPress={() => confirmAsk('Supprimer les données démo ?', 'Seuls les éléments marqués « démo » sont supprimés. Les données réelles ne sont pas touchées.', removeDemo)} /> : null}
       </Card>
+      <Spacer h={8} />
+      <SafetyPanel />
       <Muted style={{ fontSize: 12, marginTop: 8, color: t.muted }}>Bissabi Drinks - BA · Swiss Premium Botanical Beverage Brand Inspired by the Sahel</Muted>
     </Screen>
   );

@@ -50,7 +50,7 @@ export default function OfferScreen() {
   };
 
   const duplicate = () => {
-    const copy: Offer = { ...o, id: uid('of_'), number: nextNumber('OF'), date: todayISO(), validUntil: addDays(todayISO(), 30), status: 'draft', invoiceId: undefined, demo: undefined, lines: o.lines.map((l) => ({ ...l, id: uid('l') })) };
+    const copy: Offer = { ...o, id: uid('of_'), number: nextNumber('OF'), date: todayISO(), validUntil: addDays(todayISO(), 30), status: 'draft', invoiceId: undefined, demo: o.demo === true ? true : undefined, lines: o.lines.map((l) => ({ ...l, id: uid('l') })) };
     setOffers((l) => [copy, ...l]);
     router.replace({ pathname: '/offer/[id]', params: { id: copy.id } });
   };

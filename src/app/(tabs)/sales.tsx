@@ -4,16 +4,16 @@ import { Text } from 'react-native';
 import { useData } from '@/lib/data';
 import { downloadText } from '@/lib/download';
 import { chf, dateCH, todayISO } from '@/lib/format';
-import { INVOICE_STATUS, OFFER_STATUS, totals, type InvoiceStatus, type OfferStatus } from '@/lib/model';
+import { INVOICE_STATUS, OFFER_STATUS, isOpenStatus, totals, type InvoiceStatus, type OfferStatus } from '@/lib/model';
 import { vatCSV } from '@/lib/vatExport';
-import { Badge, Button, Card, Divider, Empty, ListItem, Row, Screen, Segmented, Spacer } from '@/ui/kit';
+import { Badge, Button, Card, Divider, Empty, H2, ListItem, Row, Screen, Segmented, Spacer } from '@/ui/kit';
 import { theme as t } from '@/ui/theme';
 
 const OT: Record<OfferStatus, 'neutral' | 'info' | 'success' | 'danger'> = { draft: 'neutral', sent: 'info', accepted: 'success', refused: 'danger', converted: 'success' };
-const IT: Record<InvoiceStatus, 'neutral' | 'info' | 'success' | 'danger'> = { draft: 'neutral', sent: 'info', paid: 'success', cancelled: 'danger' };
+const IT: Record<InvoiceStatus, 'neutral' | 'info' | 'success' | 'danger' | 'warning'> = { draft: 'neutral', issued: 'info', sent: 'info', partial: 'warning', paid: 'success', cancelled: 'danger' };
 
 export default function Sales() {
-  const { offers, invoices, accounts } = useData();
+  const { offers, invoices, accounts, creditNotes } = useData();
   const router = useRouter();
   const [tab, setTab] = useState<'offers' | 'invoices'>('invoices');
   const name = (id: string) => accounts.find((a) => a.id === id)?.nom ?? 'Client supprimé';
@@ -52,7 +52,7 @@ export default function Sales() {
               <ListItem
                 title={`${inv.number} · ${name(inv.accountId)}`}
                 subtitle={`${dateCH(inv.date)} · ${chf(totals(inv.lines, inv.vat).ttc)} · ${inv.vat.apply ? `TVA ${inv.vat.rate} %` : 'TVA non applicable'}${inv.demo ? ' · démo' : ''}`}
-                right={<Badge label={inv.status === 'sent' && inv.dueDate < todayISO() ? 'En retard' : INVOICE_STATUS[inv.status]} tone={inv.status === 'sent' && inv.dueDate < todayISO() ? 'danger' : IT[inv.status]} />}
+                right={<Badge label={isOpenStatus(inv.status) && inv.dueDate < todayISO() ? 'En retard' : INVOICE_STATUS[inv.status]} tone={isOpenStatus(inv.status) && inv.dueDate < todayISO() ? 'danger' : IT[inv.status]} />}
                 onPress={() => router.push({ pathname: '/invoice/[id]', params: { id: inv.id } })}
               />
             </Frag>
@@ -61,8 +61,22 @@ export default function Sales() {
       ) : (
         <Empty icon="receipt-outline" title="Aucune facture" />
       )}
+      {tab === 'invoices' && creditNotes.length ? (
+        <>
+          <Spacer />
+          <H2>Avoirs</H2>
+          <Card>
+            {creditNotes.map((c, i) => (
+              <Frag key={c.id}>
+                {i ? <Divider /> : null}
+                <ListItem title={`${c.number} · ${name(c.accountId)}`} subtitle={`Annule ${c.invoiceNumber} · ${dateCH(c.date)}${c.demo ? ' · démo' : ''}`} onPress={() => router.push({ pathname: '/credit/[id]', params: { id: c.id } })} />
+              </Frag>
+            ))}
+          </Card>
+        </>
+      ) : null}
       <Spacer />
-      <Text style={{ color: t.muted, fontSize: 12 }}>Numérotation automatique OF-AAAA-NNN / FA-AAAA-NNN.</Text>
+      <Text style={{ color: t.muted, fontSize: 12 }}>Les numéros déjà enregistrés sont conservés. Une nouvelle facture reçoit le suivant à l’émission (FA-AAAA-NNNN, ou AAAA-NNNN si c’est déjà le format de l’année). Un avoir annule une facture émise sans réutiliser son numéro.</Text>
     </Screen>
   );
 }
