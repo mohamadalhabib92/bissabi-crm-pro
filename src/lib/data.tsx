@@ -20,6 +20,7 @@ import { nextSerial } from './numbering';
 import { commitIfHydrated, continueOffline, markStorageHydrated, planDiskWrites, recordWriteOutcome, storageHydrated } from './persistGate';
 import { asyncStorageKv } from './storage';
 import { uid } from './uid';
+import { applyVibecodeImport, type VibecodeExport, type VibecodeReport } from './vibecodeImport';
 import type { AuditEvent } from './audit';
 
 type Setter<T> = (v: T | ((p: T) => T)) => void;
@@ -59,6 +60,8 @@ type Ctx = {
   restoreEncrypted: (text: string, passphrase: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   rollbackMigration: () => { ok: true } | { ok: false; error: string };
   resetBusiness: () => void;
+  /** Import additif d’une sauvegarde Vibecode (JSON). Atomique : tout ou rien, avec sauvegarde « pre-import ». */
+  importVibecode: (data: VibecodeExport) => { ok: true; report: VibecodeReport } | { ok: false; error: string };
 };
 
 const EMPTY: Store = {
@@ -328,6 +331,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
     mutate((s) => applyReset(s, new Date().toISOString()));
   }, [mutate]);
 
+  const importVibecode = useCallback((data: VibecodeExport) => {
+    if (!ref.current || !storageHydrated()) return { ok: false as const, error: 'Données pas encore ouvertes.' };
+    let report: VibecodeReport | null = null;
+    mutate((s) => {
+      const res = applyVibecodeImport(s, data, new Date().toISOString());
+      report = res.report;
+      return res.store;
+    });
+    if (!report) return { ok: false as const, error: 'Import impossible.' };
+    return { ok: true as const, report: report as VibecodeReport };
+  }, [mutate]);
+
   const value: Ctx = store
     ? {
         ready: ready && !loadError,
@@ -364,13 +379,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
         restoreEncrypted,
         rollbackMigration: rollback,
         resetBusiness,
+        importVibecode,
       }
     : {
         ready: false, loadError, writeError, dismissWriteError: () => setWriteError(null), retry,
         accounts: [], setAccounts, offers: [], setOffers, invoices: [], setInvoices, expenses: [], setExpenses,
         company: { ...DEFAULT_COMPANY }, setCompany, products: [], setProducts, creditNotes: [], audit: [], backups: [],
         nextNumber, convertOfferToInvoice, saveInvoice, deleteDraftInvoice, cancelInvoiceWithCredit, removeDemo,
-        hasDemo: false, exportPlain, exportCsv, exportEncrypted, restorePlain, restoreEncrypted, rollbackMigration: rollback, resetBusiness,
+        hasDemo: false, exportPlain, exportCsv, exportEncrypted, restorePlain, restoreEncrypted, rollbackMigration: rollback, resetBusiness, importVibecode,
       };
 
   return <C.Provider value={value}>{children}</C.Provider>;

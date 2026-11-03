@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { SvgXml } from 'react-native-svg';
 import { BACKEND_URL } from '@/lib/backend';
 import { confirmAsk } from '@/lib/confirm';
@@ -23,6 +23,17 @@ export default function Settings() {
   const [c, setC] = useState<Company>(company);
   const [saved, setSaved] = useState(false);
   const set = (p: Partial<Company>) => { setC((x) => ({ ...x, ...p })); setSaved(false); };
+  // Un import (Vibecode, Bissabi) peut remplir des champs vides pendant que le formulaire est ouvert :
+  // on reprend seulement ces champs encore vides / placeholder, sans toucher aux saisies en cours.
+  useEffect(() => {
+    setC((x) => {
+      const fill = Object.fromEntries(Object.entries(company).filter(([k, v]) => {
+        const cur = String((x as Record<string, unknown>)[k] ?? '').trim();
+        return String(v ?? '').trim() !== '' && (cur === '' || (k === 'iban' && isPlaceholderIban(cur)));
+      }));
+      return Object.keys(fill).length ? ({ ...x, ...fill } as Company) : x;
+    });
+  }, [company]);
   const ibanState = isPlaceholderIban(c.iban) ? 'placeholder' : isValidIban(c.iban) ? 'ok' : 'invalid';
 
   return (
@@ -82,6 +93,8 @@ export default function Settings() {
           const keep = Object.fromEntries(Object.entries(x).filter(([k, v]) => String(v ?? '').trim() !== '' && !(k === 'iban' && isPlaceholderIban(String(v)))));
           return { ...co, ...keep } as Company;
         })} />
+        <Spacer h={12} />
+        <Button variant="secondary" icon="code-download-outline" title="Importer sauvegarde Vibecode (JSON)" onPress={() => router.push('/import-vibecode')} />
       </Card>
       {products.length ? (
         <>

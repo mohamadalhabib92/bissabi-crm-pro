@@ -38,6 +38,8 @@ export default function ImportScreen() {
       <H2>Import complet Bissabi</H2>
       <Card style={{ marginBottom: 16 }}>
         <BissabiImportButton />
+        <Spacer h={12} />
+        <Button variant="secondary" icon="code-download-outline" title="Importer sauvegarde Vibecode (JSON)" onPress={() => router.push('/import-vibecode')} />
       </Card>
       <H2>Import de comptes (CSV)</H2>
       <Muted>Séparateur « ; », première ligne = en-têtes exacts :</Muted>
