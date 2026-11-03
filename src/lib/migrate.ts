@@ -12,7 +12,7 @@ export const CORE_KEYS = ['accounts', 'offers', 'invoices', 'expenses', 'company
 export const STORE_KEYS = [...CORE_KEYS, 'creditNotes', 'audit', 'backups', 'schemaVersion'] as const;
 export type StoreKey = (typeof STORE_KEYS)[number];
 
-export type BackupReason = 'pre-migration' | 'pre-restore' | 'pre-reset' | 'pre-rollback' | 'manual';
+export type BackupReason = 'pre-migration' | 'pre-restore' | 'pre-reset' | 'pre-rollback' | 'pre-import' | 'manual';
 export type BackupRecord = {
   id: string;
   at: string;

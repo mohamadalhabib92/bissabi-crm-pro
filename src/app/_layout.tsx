@@ -48,6 +48,7 @@ function Root() {
       <Stack.Screen name="credit/[id]" options={{ title: 'Avoir' }} />
       <Stack.Screen name="expense/[id]" options={{ title: 'Dépense' }} />
       <Stack.Screen name="import" options={{ title: 'Import CSV — comptes' }} />
+      <Stack.Screen name="import-vibecode" options={{ title: 'Import Vibecode (JSON)' }} />
       <Stack.Screen name="settings" options={{ title: 'Réglages société' }} />
       <Stack.Screen name="config" options={{ title: 'Configuration' }} />
     </Stack>
