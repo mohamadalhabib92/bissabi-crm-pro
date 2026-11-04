@@ -245,7 +245,7 @@ export function Segmented<T extends string | number>({ options, value, onChange,
               }}
               accessibilityRole="radio"
               accessibilityState={{ checked: on }}
-              style={[S().segItem, on && { backgroundColor: t.surface, ...shadow(1) }]}
+              style={[S().segItem, on && { backgroundColor: currentScheme() === 'dark' ? t.border : t.surface, ...shadow(1) }]}
             >
               <Text style={{ color: on ? t.text : t.muted, fontWeight: on ? '700' : '500', fontSize: 14 }}>{o.label}</Text>
             </Pressable>
