@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { AccessibilityInfo, Animated, Easing, Platform, Pressable, StyleSheet, Text, View, type PressableProps, type StyleProp, type ViewStyle } from 'react-native';
 import { haptic, type HapticKind } from './haptics';
+import { announce, screenReaderOn } from './access';
 import { theme as T } from './theme';
 
 const native = Platform.OS !== 'web';
@@ -87,6 +88,8 @@ export function PressableScale({
   return (
     <AnimatedPressable
       {...rest}
+      accessibilityRole={rest.accessibilityRole ?? (rest.role ? undefined : 'button')}
+      accessibilityState={{ ...rest.accessibilityState, disabled: !!disabled }}
       disabled={disabled}
       onPressIn={(e) => {
         setPressed(true);
@@ -199,13 +202,14 @@ function CelebrationView({ c, onDone }: { c: Celebration; onDone: () => void }) 
   const ring = useRef(new Animated.Value(0)).current;
   const fade = useRef(new Animated.Value(1)).current;
   useEffect(() => {
-    AccessibilityInfo.announceForAccessibility?.(c.subtitle ? `${c.title}. ${c.subtitle}` : c.title);
+    announce(c.subtitle ? `${c.title}. ${c.subtitle}` : c.title);
     const seq = Animated.sequence([
       Animated.parallel([
         Animated.spring(pop, { toValue: 1, ...springs.pop, useNativeDriver: native }),
         Animated.timing(ring, { toValue: 1, duration: reduced ? 0 : 700, easing: Easing.out(Easing.cubic), useNativeDriver: native }),
       ]),
-      Animated.delay(900),
+      // Lecteur d'écran actif : le moment reste affiché le temps d'être entendu.
+      Animated.delay(screenReaderOn() ? 3500 : 900),
       Animated.timing(fade, { toValue: 0, duration: 260, useNativeDriver: native }),
     ]);
     seq.start(({ finished }) => finished && onDone());
@@ -226,8 +230,8 @@ function CelebrationView({ c, onDone }: { c: Celebration; onDone: () => void }) 
             <Ionicons name={c.icon ?? 'checkmark'} size={34} color={T.surface} />
           </Animated.View>
         </View>
-        <Text style={[cs.title, { color: T.text }]}>{c.title}</Text>
-        {c.subtitle ? <Text style={[cs.sub, { color: T.muted }]}>{c.subtitle}</Text> : null}
+        <Text maxFontSizeMultiplier={2} style={[cs.title, { color: T.text }]}>{c.title}</Text>
+        {c.subtitle ? <Text maxFontSizeMultiplier={2} style={[cs.sub, { color: T.muted }]}>{c.subtitle}</Text> : null}
       </Pressable>
     </Animated.View>
   );
@@ -258,10 +262,10 @@ const cs = StyleSheet.create({
 function ToastView({ t: x, onDone }: { t: Toast; onDone: () => void }) {
   const v = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    AccessibilityInfo.announceForAccessibility?.(x.text);
+    announce(x.text);
     const seq = Animated.sequence([
       Animated.spring(v, { toValue: 1, ...springs.release, useNativeDriver: native }),
-      Animated.delay(2200),
+      Animated.delay(screenReaderOn() ? 4500 : 2200),
       Animated.timing(v, { toValue: 0, duration: 220, useNativeDriver: native }),
     ]);
     seq.start(({ finished }) => finished && onDone());
@@ -272,11 +276,11 @@ function ToastView({ t: x, onDone }: { t: Toast; onDone: () => void }) {
   return (
     <Animated.View
       pointerEvents="box-none"
-      style={[ts.wrap, { opacity: v, transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }] }]}
+      style={[ts.wrap, { opacity: v, transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [prefersReducedMotion() ? 0 : 24, 0] }) }] }]}
     >
-      <View accessibilityRole="alert" style={[ts.pill, { backgroundColor: T.text }]}>
+      <View accessibilityRole="alert" accessibilityLiveRegion={x.tone === 'danger' ? 'assertive' : 'polite'} style={[ts.pill, { backgroundColor: T.text }]}>
         <Ionicons name={x.icon ?? (x.tone === 'danger' ? 'alert-circle' : 'checkmark-circle')} size={18} color={fg} />
-        <Text style={[ts.text, { color: T.surface }]}>{x.text}</Text>
+        <Text maxFontSizeMultiplier={2} style={[ts.text, { color: T.surface }]}>{x.text}</Text>
       </View>
     </Animated.View>
   );

@@ -3,6 +3,7 @@ import { useData } from '@/lib/data';
 import { tr } from '@/lib/i18n';
 import { haptic, IconButton, Ionicons, type IconName } from '@/ui/kit';
 import { theme as t } from '@/ui/theme';
+import { useWindowDimensions } from 'react-native';
 
 const icon = (name: IconName) =>
   function TabIcon({ color, size, focused }: { color: unknown; size: number; focused?: boolean }) {
@@ -12,6 +13,9 @@ const icon = (name: IconName) =>
   };
 
 export default function TabsLayout() {
+  // Libellés d'onglets : suivent la taille de texte du système jusqu'à ×1,4, au-delà la barre déborderait.
+  const { fontScale } = useWindowDimensions();
+  const tabFs = (n: number) => Math.round(n * Math.min(fontScale, 1.4));
   const { company } = useData();
   const router = useRouter();
   const L = company.lang;
@@ -22,7 +26,8 @@ export default function TabsLayout() {
         tabBarActiveTintColor: t.primary,
         tabBarInactiveTintColor: t.muted,
         tabBarStyle: { backgroundColor: t.surface, borderTopColor: t.border, minHeight: 60 },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '600', letterSpacing: 0.1 },
+        tabBarAllowFontScaling: false,
+        tabBarLabelStyle: { fontSize: tabFs(11), fontWeight: '600', letterSpacing: 0.1 },
         headerStyle: { backgroundColor: t.bg },
         headerShadowVisible: false,
         headerTitleStyle: { color: t.text, fontWeight: '700' },
