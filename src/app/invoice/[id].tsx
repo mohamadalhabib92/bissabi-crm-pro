@@ -13,7 +13,7 @@ import { INVOICE_STATUS, isHoreca, isOpenStatus, totals, type Invoice } from '@/
 import { printHtml } from '@/lib/print';
 import { buildQrBill } from '@/lib/qrbill';
 import { uid } from '@/lib/storage';
-import { Badge, Button, Card, DemoBanner, Field, H2, Muted, Notice, Row, Screen, Spacer } from '@/ui/kit';
+import { Badge, Button, Card, DemoBanner, Field, H2, Muted, Notice, Row, Screen, Spacer, useFeedback } from '@/ui/kit';
 import { theme as t } from '@/ui/theme';
 
 export default function InvoiceScreen() {
@@ -21,6 +21,7 @@ export default function InvoiceScreen() {
   const { invoices, accounts, company, saveInvoice, deleteDraftInvoice, cancelInvoiceWithCredit, creditNotes } = useData();
   const router = useRouter();
   const nav = useNavigation();
+  const fb = useFeedback();
   const existing = invoices.find((i) => i.id === id);
   const [inv, setInv] = useState<Invoice>(
     existing ?? {
@@ -60,7 +61,9 @@ export default function InvoiceScreen() {
   };
   const markPaid = () => {
     const r = persist({ status: 'paid', paidAt: todayISO() });
-    if (r) setThanks(thankYou(acc, 'paid'));
+    if (!r) return;
+    setThanks(thankYou(acc, 'paid'));
+    fb.celebrate({ title: 'Facture payée', subtitle: `${r.number} · ${chf(tt.ttc)}`, icon: 'checkmark-done', tone: 'gold' });
   };
   const duplicate = () => {
     const copy: Invoice = {
@@ -116,7 +119,11 @@ export default function InvoiceScreen() {
       {err ? <Notice tone="danger" title={err} /> : null}
       <Spacer />
       <Row wrap>
-        {!locked ? <Button title="Enregistrer le brouillon" icon="checkmark" onPress={() => persist() && router.back()} /> : null}
+        {!locked ? <Button title="Enregistrer le brouillon" icon="checkmark" onPress={() => {
+              if (!persist()) return;
+              fb.toast('Brouillon enregistré');
+              router.back();
+            }} /> : null}
         {!locked ? <Button variant="secondary" icon="checkmark-circle-outline" title="Émettre" onPress={() => { const r = persist({ status: 'issued' }); if (r) setInv(r); }} /> : null}
         <Button variant="secondary" icon="print-outline" title="PDF / imprimer" onPress={() => print(locked ? inv : persist())} />
         {!locked ? <Button variant="secondary" icon="paper-plane-outline" title="Envoyer" onPress={send} /> : null}

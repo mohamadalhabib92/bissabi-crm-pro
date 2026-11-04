@@ -11,6 +11,7 @@ import { Button, Card, Field, H2, ListItem, Muted, Notice, Row, Screen, Segmente
 import { SafetyPanel } from '@/ui/SafetyPanel';
 import { theme as t } from '@/ui/theme';
 import { BissabiImportButton } from '@/ui/BissabiImport';
+import { useVibrations } from '@/ui/access';
 import { chf } from '@/lib/format';
 
 const LANGS: { label: string; value: Company['lang'] }[] = [
@@ -22,6 +23,7 @@ export default function Settings() {
   const router = useRouter();
   const [c, setC] = useState<Company>(company);
   const [saved, setSaved] = useState(false);
+  const [vibrations, setVibrations] = useVibrations();
   const set = (p: Partial<Company>) => { setC((x) => ({ ...x, ...p })); setSaved(false); };
   // Un import (Vibecode, Bissabi) peut remplir des champs vides pendant que le formulaire est ouvert :
   // on reprend seulement ces champs encore vides / placeholder, sans toucher aux saisies en cours.
@@ -85,6 +87,10 @@ export default function Settings() {
       <Muted style={{ fontSize: 12 }}>FR complet. DE / IT / EN : navigation traduite, écrans et documents encore en français.</Muted>
       <Spacer />
       <Button title={saved ? 'Enregistré ✓' : 'Enregistrer'} icon="checkmark" onPress={() => { setCompany(c); setSaved(true); }} />
+
+      <Spacer h={24} />
+      <H2>Confort</H2>
+      <Toggle label="Vibrations" value={vibrations} onChange={setVibrations} hint="Petits retours tactiles sur cet appareil. Appliqué tout de suite." />
 
       <Spacer h={24} />
       <H2>Données Bissabi</H2>

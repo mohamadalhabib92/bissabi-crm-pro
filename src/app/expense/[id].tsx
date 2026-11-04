@@ -8,7 +8,7 @@ import { useData } from '@/lib/data';
 import { dateCH, parseDate, todayISO } from '@/lib/format';
 import { EXPENSE_CATEGORIES, type Attachment, type Expense } from '@/lib/model';
 import { uid } from '@/lib/storage';
-import { Button, Card, Chip, DemoBanner, Field, ListItem, Muted, Notice, Row, Screen, Spacer } from '@/ui/kit';
+import { Button, Card, Chip, DemoBanner, Field, ListItem, Muted, Notice, Row, Screen, Spacer, useFeedback } from '@/ui/kit';
 
 const MAX_INLINE = 1.5 * 1024 * 1024;
 
@@ -25,6 +25,7 @@ async function toDataUrl(uri: string): Promise<string> {
 export default function ExpenseScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { expenses, setExpenses } = useData();
+  const fb = useFeedback();
   const router = useRouter();
   const nav = useNavigation();
   const existing = expenses.find((e) => e.id === id);
@@ -54,6 +55,7 @@ export default function ExpenseScreen() {
     if (e.vatAmount > e.amountTTC) return setErr('La TVA ne peut pas dépasser le montant TTC.');
     const rec = { ...e, date: d };
     setExpenses((l) => (l.some((x) => x.id === rec.id) ? l.map((x) => (x.id === rec.id ? rec : x)) : [rec, ...l]));
+    fb.toast('Dépense enregistrée');
     router.back();
   };
 
