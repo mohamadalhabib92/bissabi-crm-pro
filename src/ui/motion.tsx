@@ -323,3 +323,24 @@ export function Breathing({ children, size = 72, color, style }: { children?: Re
     </View>
   );
 }
+
+/** Barre de progression qui glisse en ressort jusqu'à sa valeur (0–1). */
+export function ProgressBar({ value, color, track, height = 8, label, style }: { value: number; color: string; track?: string; height?: number; label?: string; style?: StyleProp<ViewStyle> }) {
+  const v = useRef(new Animated.Value(reduced ? value : 0)).current;
+  useEffect(() => {
+    const c = Math.max(0, Math.min(1, value));
+    if (reduced) v.setValue(c);
+    else Animated.spring(v, { toValue: c, ...springs.gentle, useNativeDriver: false }).start();
+  }, [value, v]);
+  const width = v.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] });
+  return (
+    <View
+      accessibilityRole="progressbar"
+      accessibilityLabel={label}
+      accessibilityValue={{ min: 0, max: 100, now: Math.round(Math.max(0, Math.min(1, value)) * 100) }}
+      style={[{ height, borderRadius: height / 2, backgroundColor: track ?? T.surfaceAlt, overflow: 'hidden', marginVertical: 10 }, style]}
+    >
+      <Animated.View style={{ width, height, borderRadius: height / 2, backgroundColor: color }} />
+    </View>
+  );
+}

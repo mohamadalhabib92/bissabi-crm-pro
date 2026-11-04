@@ -24,7 +24,7 @@ const S = () => getStyles();
 
 export type IconName = ComponentProps<typeof Ionicons>['name'];
 export { Ionicons };
-export { FadeIn, PressableScale, Skeleton, SkeletonList, useFeedback } from './motion';
+export { Breathing, FadeIn, PressableScale, ProgressBar, Skeleton, SkeletonList, useFeedback } from './motion';
 export { haptic } from './haptics';
 
 /** Conteneur d'écran défilant, largeur max sur desktop (PWA). */
