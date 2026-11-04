@@ -1,6 +1,7 @@
 import * as DocumentPicker from 'expo-document-picker';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
+import { TextInput } from 'react-native';
 import { useData } from '@/lib/data';
 import { chf } from '@/lib/format';
 import { parseVibecodeExport, peekNextInvoiceNumber, vibecodeTotals, type VibecodeExport, type VibecodeReport, type VibecodeTotals } from '@/lib/vibecodeImport';
@@ -32,19 +33,33 @@ export default function ImportVibecodeScreen() {
       const r = await DocumentPicker.getDocumentAsync({ type: ['application/json', 'text/plain', '*/*'], copyToCacheDirectory: true });
       if (r.canceled || !r.assets?.[0]) return;
       const a = r.assets[0];
-      const text = a.file ? await a.file.text() : await (await fetch(a.uri)).text();
-      const parsed = parseVibecodeExport(text);
-      if (!parsed.ok) { setFile(null); setErr(parsed.error); return; }
-      setFile({ name: a.name, data: parsed.data });
+      let text = '';
+      try {
+        text = a.file ? await a.file.text() : await (await fetch(a.uri)).text();
+      } catch (e) {
+        setFile(null); setErr(`Lecture du fichier impossible (${a.name ?? 'sans nom'}) : ${String((e as Error)?.message ?? e)}. Essayez « Coller le contenu JSON » ci-dessous.`); return;
+      }
+      load(text, a.name ?? 'fichier');
     } catch (e) {
       setErr(String((e as Error)?.message ?? e));
     }
   };
 
+  const [paste, setPaste] = useState('');
+  /** Accepte .json, .txt ou sans extension ; retire le BOM et les espaces ; message clair si vide ou illisible. */
+  const load = (raw: string, name: string) => {
+    const text = (raw ?? '').replace(/^\uFEFF/, '').trim();
+    if (!text) { setFile(null); setErr(`Le fichier « ${name} » est vide ou n’a pas pu être lu.`); return; }
+    const parsed = parseVibecodeExport(text);
+    if (!parsed.ok) { setFile(null); setErr(`${parsed.error} (${name}, ${Math.round(text.length / 1024)} Ko)`); return; }
+    setErr(''); setFile({ name, data: parsed.data });
+  };
+
   const run = () => {
     if (!file) return;
     setBusy(true); setErr('');
-    const res = d.importVibecode(file.data);
+    let res: ReturnType<typeof d.importVibecode>;
+    try { res = d.importVibecode(file.data); } catch (e) { setBusy(false); setErr('Import interrompu : ' + String((e as Error)?.message ?? e)); return; }
     setBusy(false);
     if (!res.ok) { setErr(res.error); return; }
     setReport(res.report);
@@ -64,6 +79,11 @@ export default function ImportVibecodeScreen() {
       <Notice tone="info" title="Conseil" text="Avant l’import, téléchargez une sauvegarde chiffrée (Réglages société → Sauvegarde)." />
       <Spacer />
       <Button icon="document-attach-outline" title={file ? 'Choisir un autre fichier' : 'Choisir le fichier JSON'} onPress={() => void pick()} />
+      <Spacer h={8} />
+      <Muted>Ou collez le contenu du fichier JSON (Fichiers → ouvrir le fichier → tout sélectionner → copier) :</Muted>
+      <TextInput value={paste} onChangeText={setPaste} multiline placeholder="{ … }" autoCorrect={false} autoCapitalize="none"
+        style={{ minHeight: 90, maxHeight: 160, borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 8, fontFamily: 'Courier', fontSize: 11 }} />
+      <Button variant="secondary" icon="clipboard-outline" title="Analyser le texte collé" onPress={() => load(paste, 'texte collé')} disabled={!paste.trim()} />
       {err ? (<><Spacer h={8} /><Notice tone="danger" title="Import impossible" text={err} /></>) : null}
       {file && !report ? (
         <>
