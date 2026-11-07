@@ -17,7 +17,8 @@ import {
 } from './migrate';
 import { DEFAULT_COMPANY, coerceInvoiceStatus, isDemo, type Account, type Company, type CreditNote, type Expense, type Invoice, type Offer, type Product } from './model';
 import { nextSerial } from './numbering';
-import { commitIfHydrated, continueOffline, markStorageHydrated, planDiskWrites, recordWriteOutcome, storageHydrated } from './persistGate';
+import { commitIfHydrated, continueOffline, isPreserveOnly, markPreserveOnly, markStorageHydrated, planDiskWrites, recordWriteOutcome, storageHydrated } from './persistGate';
+import { preserveInvoiceRows } from './preserve';
 import { asyncStorageKv } from './storage';
 import { uid } from './uid';
 import { applyVibecodeImport, type VibecodeExport, type VibecodeReport } from './vibecodeImport';
@@ -122,6 +123,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const mutate = useCallback((recipe: (s: Store) => Store): Store | null => {
     const current = ref.current;
+    if (isPreserveOnly()) {
+      setWriteError('Ces données viennent d’une version plus récente. Rien n’est écrit, pour ne pas les modifier.');
+      return null;
+    }
     if (!storageHydrated() || !current) return null;
     const next = recipe(current);
     ref.current = next;
@@ -143,6 +148,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
       } else {
         markStorageHydrated();
+        markPreserveOnly(res.preserveOnly);
         setLoadError(null);
         setStore(res.store);
         ref.current = res.store;
@@ -173,7 +179,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const setAccounts = useCallback<Setter<Account[]>>((next) => { mutate((s) => ({ ...s, accounts: applySet(s.accounts, next) })); }, [mutate]);
   const setOffers = useCallback<Setter<Offer[]>>((next) => { mutate((s) => ({ ...s, offers: applySet(s.offers, next) })); }, [mutate]);
-  const setInvoices = useCallback<Setter<Invoice[]>>((next) => { mutate((s) => ({ ...s, invoices: applySet(s.invoices, next) })); }, [mutate]);
+  const setInvoices = useCallback<Setter<Invoice[]>>((next) => {
+    mutate((s) => ({ ...s, invoices: preserveInvoiceRows(s.invoices, applySet(s.invoices, next)) }));
+  }, [mutate]);
   const setExpenses = useCallback<Setter<Expense[]>>((next) => { mutate((s) => ({ ...s, expenses: applySet(s.expenses, next) })); }, [mutate]);
   const setCompany = useCallback<Setter<Company>>((next) => { mutate((s) => ({ ...s, company: applySet(s.company, next) })); }, [mutate]);
   const setProducts = useCallback<Setter<Product[]>>((next) => { mutate((s) => ({ ...s, products: applySet(s.products, next) })); }, [mutate]);
@@ -206,6 +214,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       }
       if (prev && prev.status !== 'draft') {
         nextRec = { ...prev, status: coerceInvoiceStatus(prev.status, rec.status), paidAt: rec.paidAt ?? prev.paidAt, creditNoteId: rec.creditNoteId ?? prev.creditNoteId };
+      } else if (prev) {
+        nextRec = { ...prev, ...nextRec };
+        if (prev.number) nextRec = { ...nextRec, number: prev.number };
       }
       if (!nextRec.number && nextRec.status !== 'draft') {
         const alloc = allocate('FA', { ...s, counters });
@@ -214,8 +225,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       }
       if (nextRec.status !== 'draft' && !nextRec.issuedAt) nextRec = { ...nextRec, issuedAt: todayISO() };
       nextRec = { ...nextRec, demo: prev ? (prev.demo === true ? true : undefined) : (nextRec.demo === true ? true : undefined) };
-      saved = nextRec;
-      const invoices = prev ? s.invoices.map((i) => (i.id === nextRec.id ? nextRec : i)) : [nextRec, ...s.invoices];
+      const merged = prev ? s.invoices.map((i) => (i.id === nextRec.id ? nextRec : i)) : [nextRec, ...s.invoices];
+      const invoices = preserveInvoiceRows(s.invoices, merged);
+      saved = invoices.find((i) => i.id === nextRec.id) ?? nextRec;
+      nextRec = saved;
       let audit = s.audit;
       if (!prev) audit = appendAudit(audit, { action: 'create', entity: 'invoice', entityId: nextRec.id, number: nextRec.number || undefined });
       if ((!prev || prev.status === 'draft') && nextRec.status !== 'draft') audit = appendAudit(audit, { action: 'issue', entity: 'invoice', entityId: nextRec.id, number: nextRec.number });
