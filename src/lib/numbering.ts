@@ -29,6 +29,34 @@ function padded(n: number): string {
   return String(n).padStart(4, '0');
 }
 
+export type ParsedSerial = { family: string; year: number; serial: number; raw: string };
+
+/** Découpe un numéro. La largeur (3 ou 4 chiffres) reste dans `raw` et n’est jamais réécrite ici. */
+export function parseDocNumber(raw: string): ParsedSerial | null {
+  const n = raw.trim();
+  const prefixed = /^([A-Z]{1,6})-(\d{4})-(\d+)$/.exec(n);
+  if (prefixed) return { family: prefixed[1], year: Number(prefixed[2]), serial: Number(prefixed[3]), raw: n };
+  const bare = /^(\d{4})-(\d+)$/.exec(n);
+  if (bare) return { family: '', year: Number(bare[1]), serial: Number(bare[2]), raw: n };
+  return null;
+}
+
+/**
+ * Même famille, même année, même numéro entier.
+ * `FA-2026-3` et `FA-2026-0003` occupent le même créneau, mais restent deux chaînes distinctes :
+ * cette fonction ne renvoie qu’un booléen, elle ne produit pas de numéro de remplacement.
+ */
+export function sameSerialSlot(a: string, b: string): boolean {
+  const pa = parseDocNumber(a);
+  const pb = parseDocNumber(b);
+  if (pa && pb) return pa.family === pb.family && pa.year === pb.year && pa.serial === pb.serial;
+  return a.trim() === b.trim();
+}
+
+function slotTaken(candidate: string, numbers: string[]): boolean {
+  return numbers.some((raw) => sameSerialSlot(raw, candidate));
+}
+
 /** Préfixes qui ne sont jamais des séries de factures (offres, avoirs, commandes, devis Vibecode). */
 const NON_INVOICE_PREFIXES = new Set(['OF', 'AV', 'CMD', 'DEV']);
 
@@ -89,12 +117,11 @@ export function nextSerial(opts: {
   counters: Record<string, number>;
 }): { number: string; counters: Record<string, number> } {
   const { prefix, year, numbers, counters } = opts;
-  const taken = new Set(numbers.map((x) => x.trim()));
   if (prefix !== 'FA') {
     const key = `${prefix}-${year}`;
     let n = Math.max(yearSerials(numbers, year, prefix).prefixed, counters[key] ?? 0) + 1;
     let candidate = `${prefix}-${year}-${padded(n)}`;
-    while (taken.has(candidate)) { n += 1; candidate = `${prefix}-${year}-${padded(n)}`; }
+    while (slotTaken(candidate, numbers)) { n += 1; candidate = `${prefix}-${year}-${padded(n)}`; }
     return { number: candidate, counters: { ...counters, [key]: Math.max(n, counters[key] ?? 0) } };
   }
   // Factures : on continue la série la plus haute (FA-, FAC-… ou format nu), sans jamais renuméroter.
@@ -105,7 +132,7 @@ export function nextSerial(opts: {
   let n = Math.max(0, ...series.values()) + 1;
   const format = (value: number) => (family === '' ? `${year}-${padded(value)}` : `${family}-${year}-${padded(value)}`);
   let candidate = format(n);
-  while (taken.has(candidate)) {
+  while (slotTaken(candidate, numbers)) {
     n += 1;
     candidate = format(n);
   }
