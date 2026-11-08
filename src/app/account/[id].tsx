@@ -34,7 +34,10 @@ export default function AccountScreen() {
     setErr(e);
     if (Object.keys(e).length) return;
     const rec = { ...f, nom: f.nom.trim(), prochaine_action_date: d || '' };
-    setAccounts((l) => (l.some((a) => a.id === rec.id) ? l.map((a) => (a.id === rec.id ? rec : a)) : [rec, ...l]));
+    if (!setAccounts((l) => (l.some((a) => a.id === rec.id) ? l.map((a) => (a.id === rec.id ? rec : a)) : [rec, ...l]))) {
+      setErr({ nom: 'Rien n’a été écrit.' });
+      return;
+    }
     router.back();
   };
 
@@ -114,7 +117,7 @@ export default function AccountScreen() {
             variant="danger"
             icon="trash-outline"
             title="Supprimer le compte"
-            onPress={() => confirmAsk('Supprimer ce compte ?', 'Les documents liés sont conservés.', () => { setAccounts((l) => l.filter((a) => a.id !== f.id)); router.back(); })}
+            onPress={() => confirmAsk('Supprimer ce compte ?', 'Les documents liés sont conservés.', () => { if (setAccounts((l) => l.filter((a) => a.id !== f.id))) router.back(); })}
           />
         </>
       ) : null}

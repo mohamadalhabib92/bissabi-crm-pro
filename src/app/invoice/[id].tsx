@@ -48,6 +48,7 @@ export default function InvoiceScreen() {
     setErr('');
     const rec: Invoice = { ...inv, ...patch, date: d, dueDate: due, lines: inv.lines.filter((l) => l.description.trim()) };
     const saved = saveInvoice(rec);
+    if (!saved) return setErr('Rien n’a été écrit. Le numéro et les montants déjà enregistrés sont inchangés.'), null;
     setInv(saved);
     return saved;
   };
@@ -68,8 +69,9 @@ export default function InvoiceScreen() {
       status: 'draft', paidAt: undefined, issuedAt: undefined, creditNoteId: undefined, offerId: undefined,
       demo: inv.demo === true ? true : undefined, lines: inv.lines.map((l) => ({ ...l, id: uid('l') })),
     };
-    saveInvoice(copy);
-    router.replace({ pathname: '/invoice/[id]', params: { id: copy.id } });
+    const saved = saveInvoice(copy);
+    if (!saved) return setErr('Rien n’a été écrit. Le numéro et les montants déjà enregistrés sont inchangés.');
+    router.replace({ pathname: '/invoice/[id]', params: { id: saved.id } });
   };
   const cancel = () => confirmAsk('Annuler par un avoir ?', 'La facture reste conservée, avec le statut « Annulée ». Un avoir est créé. Le numéro n’est pas réutilisé.', () => {
     const creditId = cancelInvoiceWithCredit(inv.id);

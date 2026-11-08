@@ -1,5 +1,7 @@
 # Audit Bissabi CRM Pro — 7 novembre 2026
 
+Passe adverse du 8 novembre 2026 : `docs/passe-adverse-2026-11-08.md`. Ce fichier reste l’audit du 7 novembre.
+
 Périmètre : ce dépôt seulement (`bissabi-crm-pro`), commit audité `e648daa` (main). RH Master CH n’est pas dans ce dépôt et n’est pas modifié. Aucune requête Supabase : il n’y a pas de client Supabase ici, et aucun secret n’a été lu.
 
 PR déjà présentes, non modifiées :

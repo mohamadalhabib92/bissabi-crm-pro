@@ -15,16 +15,17 @@ import {
   type Store,
   type StoreKey,
 } from './migrate';
-import { DEFAULT_COMPANY, coerceInvoiceStatus, isDemo, type Account, type Company, type CreditNote, type Expense, type Invoice, type Offer, type Product } from './model';
+import { applyDraftDeletion, applyInvoiceSave } from './invoiceSave';
+import { DEFAULT_COMPANY, isDemo, type Account, type Company, type CreditNote, type Expense, type Invoice, type Offer, type Product } from './model';
 import { nextSerial } from './numbering';
 import { commitIfHydrated, continueOffline, isPreserveOnly, markPreserveOnly, markStorageHydrated, planDiskWrites, recordWriteOutcome, storageHydrated } from './persistGate';
-import { preserveInvoiceRows } from './preserve';
+import { backupWriteAllowed, canMutateStore, deletionReported, preserveInvoiceRows } from './preserve';
 import { asyncStorageKv } from './storage';
 import { uid } from './uid';
 import { applyVibecodeImport, type VibecodeExport, type VibecodeReport } from './vibecodeImport';
 import type { AuditEvent } from './audit';
 
-type Setter<T> = (v: T | ((p: T) => T)) => void;
+type Setter<T> = (v: T | ((p: T) => T)) => boolean;
 
 type Ctx = {
   ready: boolean;
@@ -48,8 +49,8 @@ type Ctx = {
   audit: AuditEvent[];
   backups: BackupRecord[];
   nextNumber: (kind: 'OF' | 'FA' | 'AV') => string;
-  convertOfferToInvoice: (offer: Offer) => string;
-  saveInvoice: (invoice: Invoice) => Invoice;
+  convertOfferToInvoice: (offer: Offer) => string | null;
+  saveInvoice: (invoice: Invoice) => Invoice | null;
   deleteDraftInvoice: (id: string) => boolean;
   cancelInvoiceWithCredit: (id: string) => string | null;
   removeDemo: () => void;
@@ -60,7 +61,7 @@ type Ctx = {
   restorePlain: (text: string) => { ok: true } | { ok: false; error: string };
   restoreEncrypted: (text: string, passphrase: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   rollbackMigration: () => { ok: true } | { ok: false; error: string };
-  resetBusiness: () => void;
+  resetBusiness: () => boolean;
   /** Import additif d’une sauvegarde Vibecode (JSON). Atomique : tout ou rien, avec sauvegarde « pre-import ». */
   importVibecode: (data: VibecodeExport) => { ok: true; report: VibecodeReport } | { ok: false; error: string };
 };
@@ -123,11 +124,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const mutate = useCallback((recipe: (s: Store) => Store): Store | null => {
     const current = ref.current;
-    if (isPreserveOnly()) {
-      setWriteError('Ces données viennent d’une version plus récente. Rien n’est écrit, pour ne pas les modifier.');
+    if (!canMutateStore(storageHydrated(), isPreserveOnly())) {
+      if (isPreserveOnly()) setWriteError('Ces données viennent d’une version plus récente. Rien n’est écrit, pour ne pas les modifier.');
       return null;
     }
-    if (!storageHydrated() || !current) return null;
+    if (!current) return null;
     const next = recipe(current);
     ref.current = next;
     setStore(next);
@@ -177,14 +178,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setTick((n) => n + 1);
   }, []);
 
-  const setAccounts = useCallback<Setter<Account[]>>((next) => { mutate((s) => ({ ...s, accounts: applySet(s.accounts, next) })); }, [mutate]);
-  const setOffers = useCallback<Setter<Offer[]>>((next) => { mutate((s) => ({ ...s, offers: applySet(s.offers, next) })); }, [mutate]);
+  const setAccounts = useCallback<Setter<Account[]>>((next) => mutate((s) => ({ ...s, accounts: applySet(s.accounts, next) })) != null, [mutate]);
+  const setOffers = useCallback<Setter<Offer[]>>((next) => mutate((s) => ({ ...s, offers: applySet(s.offers, next) })) != null, [mutate]);
   const setInvoices = useCallback<Setter<Invoice[]>>((next) => {
-    mutate((s) => ({ ...s, invoices: preserveInvoiceRows(s.invoices, applySet(s.invoices, next)) }));
+    return mutate((s) => ({ ...s, invoices: preserveInvoiceRows(s.invoices, applySet(s.invoices, next)) })) != null;
   }, [mutate]);
-  const setExpenses = useCallback<Setter<Expense[]>>((next) => { mutate((s) => ({ ...s, expenses: applySet(s.expenses, next) })); }, [mutate]);
-  const setCompany = useCallback<Setter<Company>>((next) => { mutate((s) => ({ ...s, company: applySet(s.company, next) })); }, [mutate]);
-  const setProducts = useCallback<Setter<Product[]>>((next) => { mutate((s) => ({ ...s, products: applySet(s.products, next) })); }, [mutate]);
+  const setExpenses = useCallback<Setter<Expense[]>>((next) => mutate((s) => ({ ...s, expenses: applySet(s.expenses, next) })) != null, [mutate]);
+  const setCompany = useCallback<Setter<Company>>((next) => mutate((s) => ({ ...s, company: applySet(s.company, next) })) != null, [mutate]);
+  const setProducts = useCallback<Setter<Product[]>>((next) => mutate((s) => ({ ...s, products: applySet(s.products, next) })) != null, [mutate]);
 
   const allocate = useCallback((prefix: 'FA' | 'OF' | 'AV', s: Store) => {
     const year = new Date().getFullYear();
@@ -202,48 +203,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return number;
   }, [allocate, mutate]);
 
-  const saveInvoice = useCallback((rec: Invoice): Invoice => {
-    let saved = rec;
-    mutate((s) => {
-      const prev = s.invoices.find((i) => i.id === rec.id);
-      let counters = s.counters;
-      let nextRec: Invoice = { ...rec };
-      if (prev && prev.status !== 'draft' && rec.status === 'draft') {
-        saved = prev;
-        return s;
-      }
-      if (prev && prev.status !== 'draft') {
-        nextRec = { ...prev, status: coerceInvoiceStatus(prev.status, rec.status), paidAt: rec.paidAt ?? prev.paidAt, creditNoteId: rec.creditNoteId ?? prev.creditNoteId };
-      } else if (prev) {
-        nextRec = { ...prev, ...nextRec };
-        if (prev.number) nextRec = { ...nextRec, number: prev.number };
-      }
-      if (!nextRec.number && nextRec.status !== 'draft') {
-        const alloc = allocate('FA', { ...s, counters });
-        nextRec = { ...nextRec, number: alloc.number };
-        counters = alloc.counters;
-      }
-      if (nextRec.status !== 'draft' && !nextRec.issuedAt) nextRec = { ...nextRec, issuedAt: todayISO() };
-      nextRec = { ...nextRec, demo: prev ? (prev.demo === true ? true : undefined) : (nextRec.demo === true ? true : undefined) };
-      const merged = prev ? s.invoices.map((i) => (i.id === nextRec.id ? nextRec : i)) : [nextRec, ...s.invoices];
-      const invoices = preserveInvoiceRows(s.invoices, merged);
-      saved = invoices.find((i) => i.id === nextRec.id) ?? nextRec;
-      nextRec = saved;
-      let audit = s.audit;
-      if (!prev) audit = appendAudit(audit, { action: 'create', entity: 'invoice', entityId: nextRec.id, number: nextRec.number || undefined });
-      if ((!prev || prev.status === 'draft') && nextRec.status !== 'draft') audit = appendAudit(audit, { action: 'issue', entity: 'invoice', entityId: nextRec.id, number: nextRec.number });
-      if (nextRec.status === 'sent' && prev?.status !== 'sent') audit = appendAudit(audit, { action: 'send', entity: 'invoice', entityId: nextRec.id, number: nextRec.number });
-      if (nextRec.status === 'paid' && prev?.status !== 'paid') audit = appendAudit(audit, { action: 'pay', entity: 'invoice', entityId: nextRec.id, number: nextRec.number });
-      return { ...s, invoices, counters, audit };
+  const saveInvoice = useCallback((rec: Invoice): Invoice | null => {
+    let saved: Invoice | null = null;
+    const wrote = mutate((s) => {
+      const res = applyInvoiceSave(s, rec, (state) => allocate('FA', state), todayISO());
+      saved = res.saved;
+      return res.store;
     });
+    if (!wrote) return null;
     return saved;
   }, [allocate, mutate]);
 
   const deleteDraftInvoice = useCallback((id: string) => {
-    const current = ref.current?.invoices.find((i) => i.id === id);
-    if (!current || current.status !== 'draft') return false;
-    mutate((s) => ({ ...s, invoices: s.invoices.filter((i) => i.id !== id) }));
-    return true;
+    let deleted = false;
+    const wrote = mutate((s) => {
+      const res = applyDraftDeletion(s, id);
+      deleted = res.deleted;
+      return res.store;
+    });
+    return deletionReported(deleted, wrote != null);
   }, [mutate]);
 
   const cancelInvoiceWithCredit = useCallback((id: string) => {
@@ -291,13 +269,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
       lines: o.lines.map((l) => ({ ...l, id: uid('l') })), vat: { ...o.vat }, status: 'draft', offerId: o.id, notes: '',
       demo: o.demo === true ? true : undefined,
     };
-    mutate((s) => ({
+    const wrote = mutate((s) => ({
       ...s,
       invoices: [inv, ...s.invoices],
       offers: s.offers.map((x) => (x.id === o.id ? { ...x, status: 'converted', invoiceId: id } : x)),
       audit: appendAudit(s.audit, { action: 'create', entity: 'invoice', entityId: id, detail: `Depuis l’offre ${o.number}` }),
     }));
-    return id;
+    return wrote ? id : null;
   }, [mutate]);
 
   const removeDemo = useCallback(() => { mutate((s) => stripDemo(s)); }, [mutate]);
@@ -314,6 +292,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const restorePlain = useCallback((text: string) => {
     const parsed = parsePlainBackup(text);
     if (!parsed.ok) return parsed;
+    const incomingSchema = typeof parsed.data.schemaVersion === 'number' ? parsed.data.schemaVersion : 0;
+    const gate = backupWriteAllowed({ hydrated: storageHydrated(), preserveOnly: isPreserveOnly() }, incomingSchema, SCHEMA_VERSION);
+    if (!gate.ok) {
+      return { ok: false as const, error: gate.reason === 'future' ? 'Sauvegarde d’une version plus récente. Rien n’a été écrit.' : 'Rien n’a été écrit.' };
+    }
     const current = ref.current;
     if (!current) return { ok: false as const, error: 'Données pas encore ouvertes.' };
     const next = applyRestore(current, parsed.data, new Date().toISOString());
@@ -330,6 +313,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [restorePlain]);
 
   const rollback = useCallback(() => {
+    if (!canMutateStore(storageHydrated(), isPreserveOnly())) return { ok: false as const, error: 'Rien n’a été écrit.' };
     const current = ref.current;
     if (!current) return { ok: false as const, error: 'Données pas encore ouvertes.' };
     const res = rollbackMigration(current, new Date().toISOString());
@@ -341,7 +325,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [flush]);
 
   const resetBusiness = useCallback(() => {
-    mutate((s) => applyReset(s, new Date().toISOString()));
+    return mutate((s) => applyReset(s, new Date().toISOString())) != null;
   }, [mutate]);
 
   const importVibecode = useCallback((data: VibecodeExport) => {

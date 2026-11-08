@@ -60,7 +60,8 @@ export default function ExpenseScreen() {
     if (!(e.amountTTC > 0)) return setErr('Montant TTC obligatoire.');
     if (e.vatAmount > e.amountTTC) return setErr('La TVA ne peut pas dépasser le montant TTC.');
     const rec = { ...e, date: d };
-    setExpenses((l) => (l.some((x) => x.id === rec.id) ? l.map((x) => (x.id === rec.id ? rec : x)) : [rec, ...l]));
+    const wrote = setExpenses((l) => (l.some((x) => x.id === rec.id) ? l.map((x) => (x.id === rec.id ? rec : x)) : [rec, ...l]));
+    if (!wrote) return setErr('Rien n’a été écrit. Le justificatif déjà enregistré, s’il existe, est inchangé.');
     router.back();
   };
 
@@ -103,7 +104,7 @@ export default function ExpenseScreen() {
       {existing ? (
         <>
           <Spacer />
-          <Button variant="danger" icon="trash-outline" title="Supprimer" onPress={() => confirmAsk('Supprimer la dépense ?', '', () => { setExpenses((l) => l.filter((x) => x.id !== e.id)); router.back(); })} />
+          <Button variant="danger" icon="trash-outline" title="Supprimer" onPress={() => confirmAsk('Supprimer la dépense ?', '', () => { if (setExpenses((l) => l.filter((x) => x.id !== e.id))) router.back(); else setErr('Rien n’a été écrit. Le justificatif déjà enregistré, s’il existe, est inchangé.'); })} />
         </>
       ) : null}
     </Screen>

@@ -64,6 +64,34 @@ export function isFutureSchema(version: number, known: number): boolean {
   return Number.isFinite(version) && version > known;
 }
 
+/** Lecture pas finie, ou schéma plus récent : aucune mutation métier. */
+export function canMutateStore(hydrated: boolean, preserveOnly: boolean): boolean {
+  return hydrated && !preserveOnly;
+}
+
+export type BackupWrite =
+  | { ok: true }
+  | { ok: false; reason: 'blocked' | 'future' };
+
+/**
+ * Restauration ou retour arrière. Un schéma plus récent que celui de l’app n’est pas appliqué :
+ * l’original reste en place. Une session déjà gelée ne change pas non plus.
+ */
+export function backupWriteAllowed(
+  current: { hydrated: boolean; preserveOnly: boolean },
+  incomingSchema: number,
+  known: number,
+): BackupWrite {
+  if (!canMutateStore(current.hydrated, current.preserveOnly)) return { ok: false, reason: 'blocked' };
+  if (isFutureSchema(incomingSchema, known)) return { ok: false, reason: 'future' };
+  return { ok: true };
+}
+
+/** Le succès d’une suppression n’est vrai que si l’écriture a été acceptée. */
+export function deletionReported(deleted: boolean, wrote: boolean): boolean {
+  return deleted && wrote;
+}
+
 export function keepUnknownFields<T extends object>(prev: T, next: T): T {
   return { ...prev, ...next };
 }
