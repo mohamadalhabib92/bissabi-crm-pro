@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Kv } from './migrate';
 import { canPersistBusinessKey, shouldPersist } from './persistGate';
+import { storedParseDecision } from './preserve';
 
 /**
  * Stockage local (AsyncStorage sur mobile, localStorage sur le web).
@@ -22,10 +23,15 @@ export function asyncStorageKv(): Kv {
 
 export { uid } from './uid';
 
+export async function readRaw(key: string): Promise<string | null> {
+  return AsyncStorage.getItem(PREFIX + key);
+}
+
 export async function loadJSON<T>(key: string, fallback: T): Promise<T> {
   try {
     const raw = await AsyncStorage.getItem(PREFIX + key);
-    return raw == null ? fallback : (JSON.parse(raw) as T);
+    if (raw == null || storedParseDecision(raw) !== 'value') return fallback;
+    return JSON.parse(raw) as T;
   } catch {
     return fallback;
   }
@@ -71,10 +77,31 @@ export function usePersistentState<T>(key: string, initial: T | (() => T)) {
     let alive = true;
     loaded.current = false;
     const fb = typeof initialRef.current === 'function' ? (initialRef.current as () => T)() : initialRef.current;
-    loadJSON<T>(key, fb).then((v) => {
+    AsyncStorage.getItem(PREFIX + key).then((raw) => {
       if (!alive) return;
-      setValue(v);
+      const decision = storedParseDecision(raw);
+      if (decision === 'keep-original') {
+        // L’original illisible reste en place : on n’autorise pas l’écriture du repli.
+        loaded.current = false;
+        setReady(true);
+        return;
+      }
+      if (decision === 'value' && raw != null) {
+        try {
+          setValue(JSON.parse(raw) as T);
+        } catch {
+          loaded.current = false;
+          setReady(true);
+          return;
+        }
+      } else {
+        setValue(fb);
+      }
       loaded.current = true;
+      setReady(true);
+    }).catch(() => {
+      if (!alive) return;
+      loaded.current = false;
       setReady(true);
     });
     return () => {

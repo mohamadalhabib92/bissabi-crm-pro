@@ -84,7 +84,7 @@ export default function Settings() {
       <Segmented options={LANGS} value={c.lang} onChange={(v) => set({ lang: v })} />
       <Muted style={{ fontSize: 12 }}>FR complet. DE / IT / EN : navigation traduite, écrans et documents encore en français.</Muted>
       <Spacer />
-      <Button title={saved ? 'Enregistré ✓' : 'Enregistrer'} icon="checkmark" onPress={() => { setCompany(c); setSaved(true); }} />
+      <Button title={saved ? 'Enregistré ✓' : 'Enregistrer'} icon="checkmark" onPress={() => setSaved(setCompany(c))} />
 
       <Spacer h={24} />
       <H2>Données Bissabi</H2>

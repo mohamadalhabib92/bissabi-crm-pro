@@ -37,7 +37,8 @@ export default function OfferScreen() {
     if (!v) return setErr('Date de validité invalide (JJ.MM.AAAA).'), null;
     setErr('');
     const rec: Offer = { ...o, ...patch, validUntil: v, number: o.number || nextNumber('OF'), lines: o.lines.filter((l) => l.description.trim()) };
-    setOffers((l) => (l.some((x) => x.id === rec.id) ? l.map((x) => (x.id === rec.id ? rec : x)) : [rec, ...l]));
+    const wrote = setOffers((l) => (l.some((x) => x.id === rec.id) ? l.map((x) => (x.id === rec.id ? rec : x)) : [rec, ...l]));
+    if (!wrote) return setErr('Rien n’a été écrit.'), null;
     setO(rec);
     return rec;
   };
@@ -51,7 +52,7 @@ export default function OfferScreen() {
 
   const duplicate = () => {
     const copy: Offer = { ...o, id: uid('of_'), number: nextNumber('OF'), date: todayISO(), validUntil: addDays(todayISO(), 30), status: 'draft', invoiceId: undefined, demo: o.demo === true ? true : undefined, lines: o.lines.map((l) => ({ ...l, id: uid('l') })) };
-    setOffers((l) => [copy, ...l]);
+    if (!setOffers((l) => [copy, ...l])) return setErr('Rien n’a été écrit.');
     router.replace({ pathname: '/offer/[id]', params: { id: copy.id } });
   };
 
@@ -85,11 +86,11 @@ export default function OfferScreen() {
           </>
         ) : null}
         {o.number && !locked ? (
-          <Button small icon="swap-horizontal" title="Convertir en facture" onPress={() => { const r = persist(); if (r) { const inv = convertOfferToInvoice(r); router.replace({ pathname: '/invoice/[id]', params: { id: inv } }); } }} />
+          <Button small icon="swap-horizontal" title="Convertir en facture" onPress={() => { const r = persist(); if (!r) return; const inv = convertOfferToInvoice(r); if (!inv) return setErr('Rien n’a été écrit.'); router.replace({ pathname: '/invoice/[id]', params: { id: inv } }); }} />
         ) : null}
         {o.invoiceId ? <Button small variant="secondary" icon="receipt-outline" title="Voir la facture" onPress={() => router.push({ pathname: '/invoice/[id]', params: { id: o.invoiceId! } })} /> : null}
         {o.number ? <Button small variant="ghost" icon="copy-outline" title="Dupliquer" onPress={duplicate} /> : null}
-        {existing && !locked ? <Button small variant="danger" icon="trash-outline" title="Supprimer" onPress={() => confirmAsk('Supprimer l’offre ?', o.number, () => { setOffers((l) => l.filter((x) => x.id !== o.id)); router.back(); })} /> : null}
+        {existing && !locked ? <Button small variant="danger" icon="trash-outline" title="Supprimer" onPress={() => confirmAsk('Supprimer l’offre ?', o.number, () => { if (setOffers((l) => l.filter((x) => x.id !== o.id))) router.back(); else setErr('Rien n’a été écrit.'); })} /> : null}
       </Row>
     </Screen>
   );

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 9,
+  "invoices": [
+    {
+      "id": "fa-future",
+      "number": "FA-2026-7",
+      "accountId": "a1",
+      "date": "2026-04-01",
+      "dueDate": "2026-05-01",
+      "lines": [{ "id": "l9", "description": "Bissabi Red 25cl", "qty": 2, "unitPrice": 2.5 }],
+      "vat": { "apply": false, "rate": 2.6 },
+      "status": "paid",
+      "notes": "",
+      "champFutur": "laisser"
+    }
+  ]
+}
