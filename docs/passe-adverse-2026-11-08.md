@@ -3,6 +3,7 @@
 PR : https://github.com/mohamadalhabib92/bissabi-crm-pro/pull/6  
 Branche : `cursor/preservation-foundation-b5cc`  
 Point de départ vérifié : `93409c34887684ffa40a2ab423451d348e232103`  
+Commit des correctifs : `198dece262a9c341786b733a57b71d8742a11dd3`  
 Base main au moment de la passe : `e648daa`  
 PR #1, #4 et #5 : non touchées. Aucun merge, aucun build, aucun déploiement, aucune migration de données réelles.
 
