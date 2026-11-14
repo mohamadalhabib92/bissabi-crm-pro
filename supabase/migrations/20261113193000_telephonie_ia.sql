@@ -71,7 +71,7 @@ exception when duplicate_object then null; end $$;
 -- 1. Utilitaires : updated_at + rôles (admin / agent)
 -- -----------------------------------------------------------------------------
 create or replace function public.tel_set_updated_at() returns trigger
-language plpgsql as $$ begin new.updated_at := now(); return new; end $$;
+language plpgsql set search_path = public as $$ begin new.updated_at := now(); return new; end $$;
 
 -- Membres de l'équipe d'un compte propriétaire (owner_id = compte Bissabi).
 create table if not exists public.team_members (
@@ -261,8 +261,7 @@ create table if not exists public.tel_script_versions (
   created_by    uuid references auth.users(id) on delete set null,
   published_at  timestamptz,
   created_at    timestamptz not null default now(),
-  unique (script_id, version),
-  check (opening_line ~* '\m(IA|intelligence artificielle|AI|artificial intelligence)\M')   -- annonce IA obligatoire
+  unique (script_id, version)
 );
 
 create table if not exists public.kb_articles (
@@ -419,8 +418,7 @@ create table if not exists public.tel_calls (
   latency_p95_ms     int,
   error              text,
   created_at         timestamptz not null default now(),
-  updated_at         timestamptz not null default now(),
-  check (recording_path is null or recording_consent = 'accorde')
+  updated_at         timestamptz not null default now()
 );
 create unique index if not exists tel_calls_provider_uid on public.tel_calls(provider, provider_call_id) where provider_call_id is not null;
 create index if not exists tel_calls_owner_date_idx on public.tel_calls(owner_id, created_at desc);
@@ -582,7 +580,7 @@ end $$;
 
 -- Une version publiée est immuable
 create or replace function public.tel_freeze_published_version() returns trigger
-language plpgsql as $$ begin
+language plpgsql set search_path = public as $$ begin
   if old.status = 'publiee' and (new.system_prompt, new.opening_line, new.objections, new.voicemail_message)
                              is distinct from (old.system_prompt, old.opening_line, old.objections, old.voicemail_message) then
     raise exception 'Version publiée immuable : créez une nouvelle version';
@@ -598,7 +596,7 @@ create trigger trg_freeze_version before update on public.tel_script_versions
 -- -----------------------------------------------------------------------------
 create or replace function public.tel_window_scope_match(p_owner uuid, p_campaign_id uuid, p_campaign uuid)
 returns boolean
-language sql stable as $$
+language sql stable set search_path = public as $$
   select (p_campaign_id is not null and p_campaign = p_campaign_id)
       or (p_campaign is null and not exists (
             select 1 from public.tel_calling_windows w2
@@ -814,13 +812,7 @@ begin
    using public.tel_calls c, public.tel_settings t
    where s.call_id = c.id and t.owner_id = c.owner_id
      and c.created_at < now() - make_interval(days => t.transcript_retention_days);
-  update public.tel_calls c
-     set recording_path = null, recording_key_ref = null, recording_sha256 = null
-    from public.tel_settings t
-   where t.owner_id = c.owner_id
-     and c.recording_path is not null
-     and c.recording_expires_at is not null
-     and c.recording_expires_at < now();
+  -- Le fichier Storage est supprimé par le gateway (purgeExpiredRecordings) avant l'effacement du chemin.
 end $$;
 
 -- Vue tableau de bord (jour courant, fuseau Europe/Zurich)
@@ -862,13 +854,18 @@ alter table public.tel_webhook_events enable row level security;   -- aucune pol
 drop policy if exists tel_holidays_read on public.tel_holidays;
 create policy tel_holidays_read on public.tel_holidays for select to authenticated using (true);
 
--- Écriture réservée aux admins (configuration, scripts, campagnes, numéros, droits nLPD)
+-- Écriture réservée aux admins. Pas de FOR ALL : un SELECT permissif en double masque la policy de lecture.
 do $$ declare t text; begin
   foreach t in array array['team_members','tel_settings','tel_phone_numbers','tel_calling_windows','tel_personas','tel_scripts',
                            'tel_script_versions','kb_articles','tel_campaigns','tel_campaign_variants','tel_campaign_contacts',
                            'data_subject_requests'] loop
     execute format('drop policy if exists %1$s_admin_write on public.%1$I', t);
-    execute format('create policy %1$s_admin_write on public.%1$I for all to authenticated using (public.tel_is_admin(owner_id)) with check (public.tel_is_admin(owner_id))', t);
+    execute format('drop policy if exists %1$s_admin_insert on public.%1$I', t);
+    execute format('create policy %1$s_admin_insert on public.%1$I for insert to authenticated with check (public.tel_is_admin(owner_id))', t);
+    execute format('drop policy if exists %1$s_admin_update on public.%1$I', t);
+    execute format('create policy %1$s_admin_update on public.%1$I for update to authenticated using (public.tel_is_admin(owner_id)) with check (public.tel_is_admin(owner_id))', t);
+    execute format('drop policy if exists %1$s_admin_delete on public.%1$I', t);
+    execute format('create policy %1$s_admin_delete on public.%1$I for delete to authenticated using (public.tel_is_admin(owner_id))', t);
   end loop;
 end $$;
 
@@ -878,8 +875,15 @@ create policy tel_dnc_agent_insert on public.tel_dnc_list for insert to authenti
 drop policy if exists tel_dnc_admin_delete on public.tel_dnc_list;
 create policy tel_dnc_admin_delete on public.tel_dnc_list for delete to authenticated using (public.tel_is_admin(owner_id));
 drop policy if exists appointments_team_write on public.appointments;
-create policy appointments_team_write on public.appointments for all to authenticated
+drop policy if exists appointments_team_insert on public.appointments;
+create policy appointments_team_insert on public.appointments for insert to authenticated
+  with check (public.tel_has_access(owner_id));
+drop policy if exists appointments_team_update on public.appointments;
+create policy appointments_team_update on public.appointments for update to authenticated
   using (public.tel_has_access(owner_id)) with check (public.tel_has_access(owner_id));
+drop policy if exists appointments_team_delete on public.appointments;
+create policy appointments_team_delete on public.appointments for delete to authenticated
+  using (public.tel_has_access(owner_id));
 drop policy if exists tel_calls_team_update on public.tel_calls;
 create policy tel_calls_team_update on public.tel_calls for update to authenticated
   using (public.tel_has_access(owner_id)) with check (public.tel_has_access(owner_id));
@@ -918,9 +922,62 @@ on conflict (day, canton) do nothing;
 --   lun-ven 09:00-11:30 et 14:00-17:30 ; HORECA 14:30-17:00 ; samedi et dimanche : aucune.
 
 create index if not exists tel_windows_owner_idx on public.tel_calling_windows (owner_id, weekday);
+create index if not exists tel_windows_campaign_idx on public.tel_calling_windows (campaign_id);
 create index if not exists tel_campaigns_owner_idx on public.tel_campaigns (owner_id, status);
+create index if not exists tel_campaign_contacts_client_idx on public.tel_campaign_contacts (client_id);
+create index if not exists tel_campaign_variants_script_idx on public.tel_campaign_variants (script_version_id);
 create index if not exists tel_scripts_owner_idx on public.tel_scripts (owner_id);
+create index if not exists tel_scripts_persona_idx on public.tel_scripts (persona_id);
 create index if not exists team_members_user_idx on public.team_members (user_id);
+create index if not exists appointments_client_idx on public.appointments (client_id);
+create index if not exists appointments_call_idx on public.appointments (call_id);
+create index if not exists data_subject_requests_owner_idx on public.data_subject_requests (owner_id, status);
+create index if not exists data_subject_requests_client_idx on public.data_subject_requests (client_id);
+create index if not exists kb_articles_product_idx on public.kb_articles (product_id);
+create index if not exists tel_calls_contact_idx on public.tel_calls (contact_id);
+create index if not exists tel_calls_script_idx on public.tel_calls (script_version_id);
+create index if not exists tel_calls_phone_number_idx on public.tel_calls (phone_number_id);
+create index if not exists tel_calls_recording_expiry_idx on public.tel_calls (recording_expires_at) where recording_path is not null;
+create index if not exists tel_dnc_client_idx on public.tel_dnc_list (client_id);
+create index if not exists tel_consents_call_idx on public.tel_consents (call_id);
+
+-- Contrôles nommés, remplaçables : CREATE TABLE IF NOT EXISTS ne met pas à jour un check déjà posé.
+do $$
+declare r record;
+begin
+  for r in
+    select con.conname
+      from pg_constraint con
+      join pg_class rel on rel.oid = con.conrelid
+      join pg_namespace nsp on nsp.oid = rel.relnamespace
+     where nsp.nspname = 'public' and rel.relname = 'tel_calls' and con.contype = 'c'
+       and pg_get_constraintdef(con.oid) ilike '%recording_path%'
+  loop
+    execute format('alter table public.tel_calls drop constraint %I', r.conname);
+  end loop;
+  alter table public.tel_calls
+    add constraint tel_calls_recording_consent_chk
+    check (recording_path is null or recording_consent is not distinct from 'accorde');
+
+  for r in
+    select con.conname
+      from pg_constraint con
+      join pg_class rel on rel.oid = con.conrelid
+      join pg_namespace nsp on nsp.oid = rel.relnamespace
+     where nsp.nspname = 'public' and rel.relname = 'tel_script_versions' and con.contype = 'c'
+       and pg_get_constraintdef(con.oid) ilike '%opening_line%'
+  loop
+    execute format('alter table public.tel_script_versions drop constraint %I', r.conname);
+  end loop;
+  alter table public.tel_script_versions
+    add constraint tel_script_versions_opening_ia_chk
+    check (opening_line ~ '\m(IA|AI)\M' or opening_line ~* '(intelligence artificielle|artificial intelligence)');
+end $$;
+
+alter table public.clients enable row level security;
+alter table public.contacts enable row level security;
+alter table public.tasks enable row level security;
+alter table public.activities enable row level security;
 
 alter table public.tel_post_jobs enable row level security;
 alter table public.tel_webhook_events enable row level security;
@@ -936,9 +993,14 @@ revoke all on function public.tel_purge_retention() from public;
 revoke all on function public.tel_check_outbound(uuid, text, text, uuid, timestamptz) from public;
 revoke all on function public.tel_transfer_allowed(uuid, timestamptz, text, text) from public;
 revoke all on function public.tel_seed_default_windows(uuid) from public;
+revoke execute on function public.tel_has_access(uuid), public.tel_is_admin(uuid) from public;
 
 do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'anon') then
+    revoke execute on function public.tel_has_access(uuid), public.tel_is_admin(uuid) from anon;
+  end if;
   if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant execute on function public.tel_has_access(uuid), public.tel_is_admin(uuid) to service_role;
     grant execute on function public.tel_claim_due_contacts(int) to service_role;
     grant execute on function public.tel_claim_post_jobs(int) to service_role;
     grant execute on function public.tel_release_stale_locks(int) to service_role;
@@ -948,9 +1010,30 @@ do $$ begin
     grant execute on function public.tel_seed_default_windows(uuid) to service_role;
   end if;
   if exists (select 1 from pg_roles where rolname = 'authenticated') then
+    grant execute on function public.tel_has_access(uuid), public.tel_is_admin(uuid) to authenticated;
     grant execute on function public.tel_check_outbound(uuid, text, text, uuid, timestamptz) to authenticated;
     grant execute on function public.tel_transfer_allowed(uuid, timestamptz, text, text) to authenticated;
     grant execute on function public.tel_seed_default_windows(uuid) to authenticated;
+
+    -- crm_core retire les privilèges par défaut : sans grant, les policies RLS ne servent à rien.
+    grant select on
+      public.team_members, public.tel_settings, public.tel_phone_numbers, public.tel_calling_windows,
+      public.tel_holidays, public.tel_personas, public.tel_scripts, public.tel_script_versions,
+      public.kb_articles, public.tel_campaigns, public.tel_campaign_variants, public.tel_campaign_contacts,
+      public.tel_dnc_list, public.tel_calls, public.tel_call_events, public.tel_transcript_segments,
+      public.appointments, public.tel_consents, public.data_subject_requests, public.tel_dashboard_daily
+      to authenticated;
+    grant insert, update, delete on
+      public.team_members, public.tel_settings, public.tel_phone_numbers, public.tel_calling_windows,
+      public.tel_personas, public.tel_scripts, public.tel_script_versions, public.kb_articles,
+      public.tel_campaigns, public.tel_campaign_variants, public.tel_campaign_contacts,
+      public.data_subject_requests, public.appointments
+      to authenticated;
+    grant insert, delete on public.tel_dnc_list to authenticated;
+    grant update on public.tel_calls to authenticated;
+    grant select, insert, update on public.clients, public.contacts to authenticated;
+    -- tasks / activities : l'app ne les lit pas (écrits par le gateway, service_role). Pas de grant.
+    -- tel_post_jobs et tel_webhook_events : service_role uniquement.
   end if;
 end $$;
 

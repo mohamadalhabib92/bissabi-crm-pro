@@ -6,6 +6,7 @@ import { nullCalendar, type CalendarAdapter } from './calendar/types';
 import { CallRuntime } from './calls/runtime';
 import { loadConfig, type GatewayConfig } from './config';
 import { checkOutboundSql, createServiceClient, SupabaseTelephonyRepo } from './db';
+import { purgeExpiredRecordings } from './calls/purge';
 import { processClaim, startDialer, type ClaimedContact } from './dialer/worker';
 import { log } from './log';
 import { maskPhone } from './compliance/phone';
@@ -132,6 +133,8 @@ export function buildServer(config: GatewayConfig = loadConfig()) {
       });
     }
     await db.rpc('tel_release_stale_locks', { p_minutes: 15 });
+    await purgeExpiredRecordings(db).catch((error) => log('error', 'purge enregistrements', { error: error instanceof Error ? error.message : 'inconnu' }));
+    await db.rpc('tel_purge_retention');
   }, config.dialerIntervalMs);
 
   app.addHook('onClose', async () => stopDialer());

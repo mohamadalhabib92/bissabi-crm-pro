@@ -15,7 +15,8 @@ import {
 } from '../src/compliance/engine';
 import { decideDial, pickVariant, shouldLeaveVoicemail } from '../src/compliance/gate';
 import { VAUD_HOLIDAYS } from '../src/compliance/holidays';
-import { DEFAULT_INBOUND_OPENING, DEFAULT_OUTBOUND_OPENING, openingIsValid } from '../src/compliance/opening';
+import { DEFAULT_INBOUND_OPENING, DEFAULT_OUTBOUND_OPENING, openingDisclosesAi, openingIsValid } from '../src/compliance/opening';
+import { deleteExpiredRecordingFiles, recordingObjectKey } from '../src/calls/purge';
 import { toE164 } from '../src/compliance/phone';
 import { signTelnyx, twilioSignature, verifyTelnyxSignature, verifyTwilioSignature } from '../src/telephony/signature';
 import { executeTool, zurichLocal, type ToolContext } from '../src/tools/handlers';
@@ -127,6 +128,9 @@ test('ouverture IA, répondeur, variantes A/B', () => {
   assert.equal(openingIsValid(DEFAULT_INBOUND_OPENING), true);
   assert.equal(openingIsValid("Je vous appelle pour une offre. Je suis l'assistante IA de Bissabi."), false);
   assert.equal(openingIsValid('Bonjour, je suis une assistante virtuelle.'), false);
+  assert.equal(openingDisclosesAi("Bonjour, j'ai un restaurant à Lausanne."), false);
+  assert.equal(openingDisclosesAi("Bonjour, je suis l'assistante IA de Bissabi."), true);
+  assert.equal(openingDisclosesAi('This call uses artificial intelligence.'), true);
   const picked = pickVariant([{ id: 'A', weight: 0 }, { id: 'B', weight: 100 }], 0.2);
   assert.equal(picked?.id, 'B');
   assert.equal(shouldLeaveVoicemail({ answeredBy: 'machine', alreadyLeft: false, enabled: true }), true);
@@ -136,6 +140,11 @@ test('ouverture IA, répondeur, variantes A/B', () => {
 
 test('la migration SQL contient les mêmes motifs de refus', () => {
   const sql = readFileSync(join(root, 'supabase/migrations/20261113193000_telephonie_ia.sql'), 'utf8');
+  assert.match(sql, /recording_consent is not distinct from 'accorde'/);
+  assert.match(sql, /opening_line ~ '\\m\(IA\|AI\)\\M'/);
+  assert.doesNotMatch(sql, /recording_consent = 'accorde'/);
+  assert.match(sql, /grant select, insert, update on public\.clients, public\.contacts to authenticated/);
+  assert.match(sql, /revoke execute on function public\.tel_has_access\(uuid\), public\.tel_is_admin\(uuid\) from anon/);
   for (const reason of ['sandbox_numero_non_autorise', 'liste_ne_pas_appeler', 'annuaire_', 'verification_annuaire_perimee', 'dimanche', 'jour_ferie', 'samedi', 'hors_plage_horaire', 'numero_appelant_non_inscrit', 'non_b2b']) {
     assert.ok(sql.includes(reason), reason);
   }
@@ -331,6 +340,22 @@ test('résumé, base de connaissances, prix non inventé', async () => {
   }, ctx(repo, { callId: 'call_2', phone: '+41215550101' }));
   assert.equal(repo.clients[0].doNotCall, true);
   assert.equal(zurichLocal('2026-11-16', '10:00').toISOString(), '2026-11-16T09:00:00.000Z');
+});
+
+test('la purge efface le fichier avant le chemin, et pas si Storage échoue', async () => {
+  assert.equal(recordingObjectKey('call-recordings/owner/call.ogg.enc'), 'owner/call.ogg.enc');
+  assert.equal(recordingObjectKey('storage: call-recordings/owner/call.ogg.enc'), 'owner/call.ogg.enc');
+  const removed: string[][] = [];
+  const ids = await deleteExpiredRecordingFiles(
+    [{ id: 'c1', recording_path: 'call-recordings/owner/c1.ogg.enc' }],
+    async (keys) => { removed.push(keys); },
+  );
+  assert.deepEqual(ids, ['c1']);
+  assert.deepEqual(removed, [['owner/c1.ogg.enc']]);
+  await assert.rejects(() => deleteExpiredRecordingFiles(
+    [{ id: 'c2', recording_path: 'owner/c2.ogg.enc' }],
+    async () => { throw new Error('storage'); },
+  ));
 });
 
 test('transfert hors fenêtre un dimanche', () => {

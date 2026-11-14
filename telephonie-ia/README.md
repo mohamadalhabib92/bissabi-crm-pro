@@ -105,7 +105,7 @@ Santé : `GET /health`.
 - Déploiement du gateway et URL publique TLS.
 - Application de la migration et création du compte Auth.
 - Consentement OAuth Google (et plus tard Outlook) pour poser les rendez-vous dans l’agenda.
-- `pg_cron` n’est pas activé par la migration. Le gateway réserve la file lui-même. Plus tard, si vous activez l’extension : `tel_release_stale_locks` chaque minute et `tel_purge_retention` la nuit.
+- `pg_cron` n’est pas activé par la migration. Le gateway réserve la file lui-même, supprime les fichiers d’enregistrement expirés dans Storage, puis appelle `tel_purge_retention` pour les transcriptions. Plus tard, si vous activez l’extension : `tel_release_stale_locks` chaque minute.
 - Le pipeline STT + LLM + TTS hébergé dans l’UE est une interface seulement. Twilio compose et vérifie la signature ; le pont de transfert Twilio n’est pas fait.
 - Aucun audio n’est stocké. Le seau privé `call-recordings` est créé pour plus tard, vide.
 

@@ -4,6 +4,14 @@ export function openingIsValid(line: string): boolean {
   return /assistante\s+IA\s+de\s+Bissabi/i.test(first);
 }
 
+/**
+ * Même règle que le check SQL : IA/AI en casse exacte (pas le « ai » de « j'ai »),
+ * ou les formes longues sans tenir compte de la casse.
+ */
+export function openingDisclosesAi(line: string): boolean {
+  return /\b(?:IA|AI)\b/.test(line) || /intelligence artificielle|artificial intelligence/i.test(line);
+}
+
 export const DEFAULT_OUTBOUND_OPENING =
   "Bonjour, je suis l'assistante IA de Bissabi. Cet échange est transcrit pour le suivi, sans enregistrement audio. Je vous appelle au sujet de nos boissons à l'hibiscus, préparées en Suisse.";
 
