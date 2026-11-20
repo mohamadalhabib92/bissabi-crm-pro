@@ -30,6 +30,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="pipeline" options={{ title: tr(L, 'pipeline'), tabBarIcon: icon('git-network-outline') }} />
       <Tabs.Screen name="sales" options={{ title: tr(L, 'sales'), tabBarIcon: icon('document-text-outline') }} />
       <Tabs.Screen name="expenses" options={{ title: tr(L, 'expenses'), tabBarIcon: icon('receipt-outline') }} />
+      <Tabs.Screen name="telephonie" options={{ title: tr(L, 'telephony'), headerShown: false, tabBarIcon: icon('call-outline') }} />
     </Tabs>
   );
 }
