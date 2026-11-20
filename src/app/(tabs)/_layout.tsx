@@ -1,24 +1,33 @@
 import { Tabs, useRouter } from 'expo-router';
 import { useData } from '@/lib/data';
 import { tr } from '@/lib/i18n';
-import { IconButton, Ionicons, type IconName } from '@/ui/kit';
+import { haptic, IconButton, Ionicons, type IconName } from '@/ui/kit';
 import { theme as t } from '@/ui/theme';
+import { useWindowDimensions } from 'react-native';
 
 const icon = (name: IconName) =>
-  function TabIcon({ color, size }: { color: unknown; size: number }) {
-    return <Ionicons name={name} color={typeof color === 'string' ? color : undefined} size={size} />;
+  function TabIcon({ color, size, focused }: { color: unknown; size: number; focused?: boolean }) {
+    // Onglet actif : pictogramme plein (convention iOS), inactif : contour.
+    const n = (focused ? name.replace(/-outline$/, '') : name) as IconName;
+    return <Ionicons name={n} color={typeof color === 'string' ? color : undefined} size={size} />;
   };
 
 export default function TabsLayout() {
+  // Libellés d'onglets : suivent la taille de texte du système jusqu'à ×1,4, au-delà la barre déborderait.
+  const { fontScale } = useWindowDimensions();
+  const tabFs = (n: number) => Math.round(n * Math.min(fontScale, 1.4));
   const { company } = useData();
   const router = useRouter();
   const L = company.lang;
   return (
     <Tabs
+      screenListeners={{ tabPress: () => haptic('select') }}
       screenOptions={{
         tabBarActiveTintColor: t.primary,
         tabBarInactiveTintColor: t.muted,
         tabBarStyle: { backgroundColor: t.surface, borderTopColor: t.border, minHeight: 60 },
+        tabBarAllowFontScaling: false,
+        tabBarLabelStyle: { fontSize: tabFs(11), fontWeight: '600', letterSpacing: 0.1 },
         headerStyle: { backgroundColor: t.bg },
         headerShadowVisible: false,
         headerTitleStyle: { color: t.text, fontWeight: '700' },

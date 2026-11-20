@@ -1,13 +1,18 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, Text, useColorScheme, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { DataProvider, useData } from '@/lib/data';
 import { AppErrorBoundary, BootFallback } from '@/ui/AppGuard';
-import { theme as t } from '@/ui/theme';
+import { FeedbackProvider } from '@/ui/motion';
+import { applyScheme, theme as t, type Scheme } from '@/ui/theme';
 
 function Root() {
+  // Apparence système (clair / sombre). Les jetons sont réécrits avant le rendu des enfants ;
+  // seule la navigation est remontée (clé) — les données restent dans DataProvider, rien n'est relu ni perdu.
+  const scheme: Scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
+  applyScheme(scheme);
   const { ready, loadError, writeError, dismissWriteError, retry } = useData();
   const [slow, setSlow] = useState(false);
   useEffect(() => {
@@ -30,7 +35,8 @@ function Root() {
     );
   }
   return (
-    <View style={{ flex: 1, backgroundColor: t.bg }}>
+    <View key={scheme} style={{ flex: 1, backgroundColor: t.bg }}>
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       {writeError ? (
         <View style={{ backgroundColor: t.dangerBg, paddingHorizontal: 16, paddingVertical: 12 }}>
           <Text style={{ color: t.danger, fontWeight: '700' }}>Enregistrement impossible</Text>
@@ -40,7 +46,7 @@ function Root() {
           </Pressable>
         </View>
       ) : null}
-    <Stack screenOptions={{ headerTintColor: t.primary, headerStyle: { backgroundColor: t.bg }, headerShadowVisible: false, contentStyle: { backgroundColor: t.bg }, headerBackTitle: 'Retour' }}>
+    <Stack screenOptions={{ headerTintColor: t.primary, headerStyle: { backgroundColor: t.bg }, headerShadowVisible: false, contentStyle: { backgroundColor: t.bg }, headerBackTitle: 'Retour', headerTitleStyle: { color: t.text, fontWeight: '700' }, animation: 'default' }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="account/[id]" options={{ title: 'Compte' }} />
       <Stack.Screen name="offer/[id]" options={{ title: 'Offre' }} />
@@ -59,10 +65,11 @@ function Root() {
 export default function Layout() {
   return (
     <SafeAreaProvider>
-      <StatusBar style="dark" />
       <AppErrorBoundary>
         <DataProvider>
-          <Root />
+          <FeedbackProvider>
+            <Root />
+          </FeedbackProvider>
         </DataProvider>
       </AppErrorBoundary>
     </SafeAreaProvider>

@@ -9,7 +9,7 @@ import { dateCH, parseDate, todayISO } from '@/lib/format';
 import { EXPENSE_CATEGORIES, type Attachment, type Expense } from '@/lib/model';
 import { attachmentSubtitle, decideAttachment, shouldTryInline } from '@/lib/preserve';
 import { uid } from '@/lib/storage';
-import { Button, Card, Chip, DemoBanner, Field, ListItem, Muted, Notice, Row, Screen, Spacer } from '@/ui/kit';
+import { Button, Card, Chip, DemoBanner, Field, ListItem, Muted, Notice, Row, Screen, Spacer, useFeedback } from '@/ui/kit';
 
 async function toDataUrl(uri: string): Promise<string> {
   const blob = await (await fetch(uri)).blob();
@@ -24,6 +24,7 @@ async function toDataUrl(uri: string): Promise<string> {
 export default function ExpenseScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { expenses, setExpenses } = useData();
+  const fb = useFeedback();
   const router = useRouter();
   const nav = useNavigation();
   const existing = expenses.find((e) => e.id === id);
@@ -62,6 +63,7 @@ export default function ExpenseScreen() {
     const rec = { ...e, date: d };
     const wrote = setExpenses((l) => (l.some((x) => x.id === rec.id) ? l.map((x) => (x.id === rec.id ? rec : x)) : [rec, ...l]));
     if (!wrote) return setErr('Rien n’a été écrit. Le justificatif déjà enregistré, s’il existe, est inchangé.');
+    fb.toast('Dépense enregistrée');
     router.back();
   };
 
