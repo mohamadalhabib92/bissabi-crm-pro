@@ -6,6 +6,7 @@ import { STORE_KEYS, type Kv, type Store, type StoreKey } from './migrate';
  * un état vide (premier rendu, timeout) ne peut pas écraser les données déjà présentes.
  */
 let hydrated = false;
+let preserveOnly = false;
 
 const BUSINESS = new Set<string>(STORE_KEYS);
 
@@ -18,8 +19,18 @@ export function markStorageHydrated(): void {
   hydrated = true;
 }
 
+/** Schéma plus récent que celui de cette application : lecture seule, aucune clé métier. */
+export function markPreserveOnly(on: boolean): void {
+  preserveOnly = on;
+}
+
+export function isPreserveOnly(): boolean {
+  return preserveOnly;
+}
+
 export function resetHydrationForTests(): void {
   hydrated = false;
+  preserveOnly = false;
 }
 
 /**
@@ -31,6 +42,7 @@ export function continueOffline(): void {
 }
 
 export function canPersistBusinessKey(key: string): boolean {
+  if (preserveOnly && BUSINESS.has(key)) return false;
   return !BUSINESS.has(key) || hydrated;
 }
 
@@ -41,7 +53,7 @@ export function shouldPersist(keyLoaded: boolean, key: string): boolean {
 
 /** Point de passage unique des écritures métier. Retourne false sans toucher au stockage si la lecture n’a pas abouti. */
 export async function commitIfHydrated(kv: Kv, entries: { key: string; value: string }[]): Promise<boolean> {
-  if (!hydrated) return false;
+  if (!hydrated || preserveOnly) return false;
   for (const entry of entries) {
     if (!BUSINESS.has(entry.key)) continue;
     await kv.set(entry.key, entry.value);

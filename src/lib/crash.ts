@@ -1,6 +1,7 @@
 import { env } from './config';
 import { postSentry } from './crashReport';
-import { loadJSON, saveJSON } from './storage';
+import { nextCrashLog } from './preserve';
+import { readRaw, saveJSON } from './storage';
 
 type CrashRow = { at: string; message: string };
 
@@ -12,11 +13,11 @@ export function sentryDsn(): string | null {
 export async function reportCrash(error: unknown): Promise<void> {
   const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
   try {
-    const prev = await loadJSON<CrashRow[]>('crashes', []);
-    const next = [...(Array.isArray(prev) ? prev : []), { at: new Date().toISOString(), message }].slice(-30);
-    await saveJSON('crashes', next);
+    const raw = await readRaw('crashes');
+    const decision = nextCrashLog(raw, { at: new Date().toISOString(), message });
+    if (decision.action === 'write') await saveJSON('crashes', JSON.parse(decision.value) as CrashRow[]);
   } catch {
-    // le journal local ne doit pas relancer l’erreur
+    // le journal local ne doit pas relancer l’erreur, ni écraser un blob illisible
   }
   await postSentry(sentryDsn(), error);
 }

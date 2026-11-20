@@ -7,9 +7,12 @@
     "@expo/vector-icons": "^15.0.2",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/netinfo": "12.0.1",
+    "@supabase/supabase-js": "^2.119.0",
     "expo": "~58.0.19",
+    "expo-blur": "~58.0.6",
     "expo-constants": "~58.0.13",
     "expo-document-picker": "~58.0.4",
+    "expo-haptics": "~58.0.7",
     "expo-linking": "~58.0.14",
     "expo-print": "~58.0.7",
     "expo-router": "~58.0.26",
@@ -24,6 +27,7 @@
     "react-native-web": "^0.21.4"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.16",
     "@types/qrcode": "^1.5.6",
     "@types/react": "~19.3.0",
     "jsqr": "^1.4.0",
@@ -36,7 +40,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/*.test.ts",
+    "test": "tsx --test tests/*.test.ts services/voice-gateway/test/*.test.ts",
     "build:web": "expo export -p web && node scripts/pwa-postbuild.mjs",
     "icons": "python3 scripts/make-icons.py"
   },

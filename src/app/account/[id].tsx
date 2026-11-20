@@ -5,7 +5,7 @@ import { useData } from '@/lib/data';
 import { chf, dateCH, parseDate } from '@/lib/format';
 import { ACCOUNT_TYPES, CANTONS, DELIVERY_CANTON, INVOICE_STATUS, LOGISTICS, OFFER_STATUS, OUT_OF_ZONE, STAGES, totals, type Account } from '@/lib/model';
 import { uid } from '@/lib/storage';
-import { Badge, Button, Card, Chip, DemoBanner, Divider, Field, H2, ListItem, Muted, Notice, Row, Screen, Spacer, Toggle } from '@/ui/kit';
+import { Badge, Button, Card, Chip, DemoBanner, Divider, Field, H2, ListItem, Muted, Notice, Row, Screen, Spacer, Toggle, useFeedback } from '@/ui/kit';
 
 const EMPTY: Omit<Account, 'id' | 'createdAt'> = {
   nom: '', type: 'HORECA', etape: 'prospect', canton: 'VD', ville: '', adresse: '', npa: '', livraison_ok: true, mode_logistique: 'Livraison Bissabi',
@@ -15,6 +15,7 @@ const EMPTY: Omit<Account, 'id' | 'createdAt'> = {
 export default function AccountScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { accounts, setAccounts, offers, invoices } = useData();
+  const fb = useFeedback();
   const router = useRouter();
   const nav = useNavigation();
   const existing = accounts.find((a) => a.id === id);
@@ -32,9 +33,14 @@ export default function AccountScreen() {
     const d = dateTxt.trim() ? parseDate(dateTxt) : '';
     if (dateTxt.trim() && !d) e.date = 'Date invalide (JJ.MM.AAAA)';
     setErr(e);
-    if (Object.keys(e).length) return;
+    if (Object.keys(e).length) return fb.haptic('error');
     const rec = { ...f, nom: f.nom.trim(), prochaine_action_date: d || '' };
-    setAccounts((l) => (l.some((a) => a.id === rec.id) ? l.map((a) => (a.id === rec.id ? rec : a)) : [rec, ...l]));
+    const isNew = !accounts.some((a) => a.id === rec.id);
+    if (!setAccounts((l) => (l.some((a) => a.id === rec.id) ? l.map((a) => (a.id === rec.id ? rec : a)) : [rec, ...l]))) {
+      setErr({ nom: 'Rien n’a été écrit.' });
+      return;
+    }
+    fb.toast(isNew ? `Compte « ${rec.nom} » créé` : 'Compte enregistré');
     router.back();
   };
 
@@ -114,7 +120,7 @@ export default function AccountScreen() {
             variant="danger"
             icon="trash-outline"
             title="Supprimer le compte"
-            onPress={() => confirmAsk('Supprimer ce compte ?', 'Les documents liés sont conservés.', () => { setAccounts((l) => l.filter((a) => a.id !== f.id)); router.back(); })}
+            onPress={() => confirmAsk('Supprimer ce compte ?', 'Les documents liés sont conservés.', () => { if (setAccounts((l) => l.filter((a) => a.id !== f.id))) router.back(); })}
           />
         </>
       ) : null}

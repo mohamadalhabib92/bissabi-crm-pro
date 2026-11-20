@@ -3,7 +3,7 @@ import { ScrollView, Text, View } from 'react-native';
 import { useData } from '@/lib/data';
 import { dateCH } from '@/lib/format';
 import { DELIVERY_CANTON, STAGES, stageIndex, type Stage } from '@/lib/model';
-import { Badge, Card, IconButton, Muted, Row, styles } from '@/ui/kit';
+import { Badge, Card, IconButton, Muted, Row, styles, VerreFrame } from '@/ui/kit';
 import { theme as t } from '@/ui/theme';
 
 /** Pipeline commercial (ordre fixe) : Prospect → Contacté → RDV/échantillon → Essai → Première commande → Client actif. */
@@ -13,7 +13,7 @@ export default function Pipeline() {
   const move = (id: string, dir: 1 | -1) =>
     setAccounts((l) => l.map((a) => { if (a.id !== id) return a; const i = stageIndex(a.etape) + dir; return i < 0 || i >= STAGES.length ? a : { ...a, etape: STAGES[i].key as Stage }; }));
   return (
-    <View style={{ flex: 1, backgroundColor: t.bg }}>
+    <VerreFrame>
       <Muted style={{ paddingHorizontal: 20, paddingTop: 12 }}>Faites défiler horizontalement · flèches pour changer d’étape.</Muted>
       <ScrollView horizontal contentContainerStyle={{ padding: 16, gap: 12 }}>
         {STAGES.map((s, si) => {
@@ -21,7 +21,7 @@ export default function Pipeline() {
           return (
             <View key={s.key} style={{ width: 260 }}>
               <Row style={{ justifyContent: 'space-between', marginBottom: 8 }}>
-                <Text style={{ color: t.primary, fontWeight: '800' }}>{si + 1}. {s.label}</Text>
+                <Text accessibilityRole="header" maxFontSizeMultiplier={1.8} style={{ color: t.primary, fontWeight: '800', flexShrink: 1 }}>{si + 1}. {s.label}</Text>
                 <Badge label={String(col.length)} />
               </Row>
               <ScrollView style={{ maxHeight: 640 }}>
@@ -43,6 +43,6 @@ export default function Pipeline() {
           );
         })}
       </ScrollView>
-    </View>
+    </VerreFrame>
   );
 }

@@ -29,7 +29,7 @@ export default function ImportScreen() {
   const analyse = () => { setRes(importAccounts(text, accounts, () => uid('acc_'))); setDone(0); };
   const confirm = () => {
     if (!res?.ok.length) return;
-    setAccounts((l) => [...res.ok, ...l]);
+    if (!setAccounts((l) => [...res.ok, ...l])) return;
     setDone(res.ok.length);
   };
 

@@ -59,8 +59,8 @@ export function SafetyPanel() {
     void (async () => {
       const ok = await downloadText(`bissabi-crm-avant-reset-${todayISO()}.json`, JSON.stringify(data.exportPlain(), null, 2), 'application/json');
       if (!ok) return setMsg({ tone: 'warning', title: 'Réinitialisation annulée', text: 'L’export n’a pas été confirmé.' });
-      data.resetBusiness();
-      setMsg({ tone: 'success', title: 'Données métier effacées', text: 'La sauvegarde interne d’avant reset est conservée.' });
+      if (!data.resetBusiness()) return setMsg({ tone: 'danger', title: 'Réinitialisation refusée', text: 'Rien n’a été écrit. Les factures et les justificatifs restent en place.' });
+      setMsg({ tone: 'success', title: 'Données métier effacées', text: 'La sauvegarde interne d’avant reset est conservée. Si l’alerte d’enregistrement apparaît, l’appareil n’a pas encore la copie.' });
     })();
   });
 
