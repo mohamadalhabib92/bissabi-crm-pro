@@ -1,9 +1,11 @@
 import { Stack } from 'expo-router';
-import { theme as t } from '@/ui/theme';
+import { useReducedMotion } from '@/ui/motion';
+import { alpha, theme as t } from '@/ui/theme';
 
 export default function TelephonieLayout() {
+  const reduceMotion = useReducedMotion();
   return (
-    <Stack screenOptions={{ headerTintColor: t.primary, headerStyle: { backgroundColor: t.bg }, headerShadowVisible: false, contentStyle: { backgroundColor: t.bg }, headerBackTitle: 'Retour' }}>
+    <Stack screenOptions={{ headerTintColor: t.primary, headerStyle: { backgroundColor: alpha(t.surface, 0.94) }, headerShadowVisible: true, contentStyle: { backgroundColor: t.bg }, headerBackTitle: 'Retour', headerTitleStyle: { color: t.text, fontWeight: '700' }, animation: reduceMotion ? 'none' : 'default' }}>
       <Stack.Screen name="index" options={{ title: 'Téléphonie IA' }} />
       <Stack.Screen name="journal" options={{ title: 'Journal des appels' }} />
       <Stack.Screen name="appel/[id]" options={{ title: 'Appel' }} />

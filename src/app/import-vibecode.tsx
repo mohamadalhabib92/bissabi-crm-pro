@@ -6,6 +6,7 @@ import { useData } from '@/lib/data';
 import { chf } from '@/lib/format';
 import { parseVibecodeExport, peekNextInvoiceNumber, vibecodeTotals, type VibecodeExport, type VibecodeReport, type VibecodeTotals } from '@/lib/vibecodeImport';
 import { Button, Card, H2, ListItem, Muted, Notice, Spacer, Screen } from '@/ui/kit';
+import { theme } from '@/ui/theme';
 
 function TotalsCard({ t }: { t: VibecodeTotals }) {
   return (
@@ -82,7 +83,8 @@ export default function ImportVibecodeScreen() {
       <Spacer h={8} />
       <Muted>Ou collez le contenu du fichier JSON (Fichiers → ouvrir le fichier → tout sélectionner → copier) :</Muted>
       <TextInput value={paste} onChangeText={setPaste} multiline placeholder="{ … }" autoCorrect={false} autoCapitalize="none"
-        style={{ minHeight: 90, maxHeight: 160, borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 8, fontFamily: 'Courier', fontSize: 11 }} />
+        accessibilityLabel="Contenu JSON collé"
+        style={{ minHeight: 90, maxHeight: 160, borderWidth: 1, borderColor: theme.border, borderRadius: 12, padding: 12, fontFamily: 'Courier', fontSize: 13, color: theme.text, backgroundColor: theme.surface }} />
       <Button variant="secondary" icon="clipboard-outline" title="Analyser le texte collé" onPress={() => load(paste, 'texte collé')} disabled={!paste.trim()} />
       {err ? (<><Spacer h={8} /><Notice tone="danger" title="Import impossible" text={err} /></>) : null}
       {file && !report ? (

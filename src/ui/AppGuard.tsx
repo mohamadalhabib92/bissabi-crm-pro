@@ -1,8 +1,9 @@
-import { Component, type ReactNode } from 'react';
+import { Component, useState, type ReactNode } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, Text, View } from 'react-native';
 import { reportCrash } from '@/lib/crash';
 import { Breathing } from './motion';
+import { ambientShadow, keyShadow, shadeEdge, sheenColor, sinkOffset } from './relief';
 import { theme as t } from './theme';
 
 export class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
@@ -29,6 +30,7 @@ export class AppErrorBoundary extends Component<{ children: ReactNode }, { error
 }
 
 export function BootFallback({ title, text, onRetry }: { title: string; text?: string; onRetry?: () => void }) {
+  const [pressed, setPressed] = useState(false);
   return (
     <View style={{ flex: 1, backgroundColor: t.bg, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       {/* Attente : respiration lente. Problème : pastille fixe, sans mouvement anxiogène. */}
@@ -44,7 +46,9 @@ export function BootFallback({ title, text, onRetry }: { title: string; text?: s
           accessibilityRole="button"
           accessibilityLabel="Réessayer"
           onPress={onRetry}
-          style={{ marginTop: 20, minHeight: 48, minWidth: 44, paddingHorizontal: 18, borderRadius: 14, backgroundColor: t.primary, alignItems: 'center', justifyContent: 'center' }}
+          onPressIn={() => setPressed(true)}
+          onPressOut={() => setPressed(false)}
+          style={[{ marginTop: 20, minHeight: 48, minWidth: 44, paddingHorizontal: 18, borderRadius: 14, backgroundColor: t.primary, alignItems: 'center', justifyContent: 'center', borderTopWidth: 1, borderTopColor: sheenColor(pressed), borderBottomWidth: 1, borderBottomColor: shadeEdge(pressed), transform: [{ translateY: sinkOffset(pressed) }] }, ambientShadow(pressed), keyShadow(pressed)]}
         >
           <Text style={{ color: t.onPrimary, fontWeight: '700' }}>Réessayer</Text>
         </Pressable>

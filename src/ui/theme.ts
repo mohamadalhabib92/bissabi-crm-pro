@@ -18,6 +18,13 @@ const LIGHT = {
   qrInk: '#000000', qrPaper: '#FFFFFF', shadow: '#000000',
   /** Teinte douce de la marque (halos, pastilles d'icône). */
   primarySoft: '#E3ECE5',
+  /** Pigment du liseré clair (biseau). */
+  veil: '#FFFFFF',
+  /** Pigment de l’ombre et du bord bas. */
+  ink: '#16211B',
+  /** Halos derrière le verre — pâles, pour que le texte reste AA à travers le voile. */
+  wash: '#D7E8DC',
+  washAlt: '#E8D7A4',
 };
 /** Sombre : forêt nocturne, encre crème, sauge lumineuse et or adouci (AA vérifié). */
 const DARK: typeof LIGHT = {
@@ -27,6 +34,10 @@ const DARK: typeof LIGHT = {
   warning: '#E9C46A', warningBg: '#2E2512', info: '#8DB9E6', infoBg: '#13243A',
   qrInk: '#000000', qrPaper: '#FFFFFF', shadow: '#000000',
   primarySoft: '#1B2E23',
+  veil: '#FFFFFF',
+  ink: '#000000',
+  wash: '#234232',
+  washAlt: '#3E3518',
 };
 
 export const theme = {
@@ -62,6 +73,44 @@ export const type = {
   /** Montants : chiffres tabulaires. */
   figure: { fontSize: 24, lineHeight: 30, fontWeight: '700' as const, letterSpacing: -0.4, fontVariant: ['tabular-nums' as const] },
 };
-/** Ombres : voir `shadow()` dans kit.tsx (aucune ombre en sombre — la profondeur vient des surfaces). */
+/**
+ * Verre : voile de `surface` posé sur le fond et les halos.
+ * 0,72 laisse voir la teinte floue tout en gardant le texte au-dessus de 4,5:1 (testé).
+ */
+export const GLASS_ALPHA = 0.72;
+/** Force des halos décoratifs, mesurée sur `bg` avant le voile. */
+export const WASH_ALPHA = 0.55;
+
+export type Relief = {
+  offsetY: number;
+  radius: number;
+  opacity: number;
+  sheen: number;
+  sink: number;
+  keyOffsetY: number;
+  keyRadius: number;
+  keyOpacity: number;
+};
+
+/** Relief d’un bouton : ombre large, ombre courte, liseré haut, enfoncement. */
+export function reliefMetrics(pressed: boolean, dark: boolean): Relief {
+  if (pressed) {
+    return {
+      offsetY: 1, radius: 2, opacity: dark ? 0.28 : 0.12, sheen: 0.16, sink: 2,
+      keyOffsetY: 1, keyRadius: 1, keyOpacity: 0.24,
+    };
+  }
+  return {
+    offsetY: dark ? 8 : 7,
+    radius: dark ? 18 : 16,
+    opacity: dark ? 0.5 : 0.2,
+    sheen: dark ? 0.34 : 0.78,
+    sink: 0,
+    keyOffsetY: 2,
+    keyRadius: 3,
+    keyOpacity: dark ? 0.42 : 0.22,
+  };
+}
+
 /** Couleur + alpha (hex 6 chiffres). */
 export const alpha = (hex: string, a: number) => hex + Math.round(Math.max(0, Math.min(1, a)) * 255).toString(16).padStart(2, '0');

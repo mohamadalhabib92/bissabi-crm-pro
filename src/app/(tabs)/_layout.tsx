@@ -2,7 +2,7 @@ import { Tabs, useRouter } from 'expo-router';
 import { useData } from '@/lib/data';
 import { tr } from '@/lib/i18n';
 import { haptic, IconButton, Ionicons, type IconName } from '@/ui/kit';
-import { theme as t } from '@/ui/theme';
+import { alpha, currentScheme, theme as t } from '@/ui/theme';
 import { useWindowDimensions } from 'react-native';
 
 const icon = (name: IconName) =>
@@ -25,16 +25,27 @@ export default function TabsLayout() {
       screenOptions={{
         tabBarActiveTintColor: t.primary,
         tabBarInactiveTintColor: t.muted,
-        tabBarStyle: { backgroundColor: t.surface, borderTopColor: t.border, minHeight: 60 },
+        tabBarStyle: {
+          backgroundColor: alpha(t.surface, 0.94),
+          borderTopWidth: 1,
+          borderTopColor: alpha(t.veil, currentScheme() === 'dark' ? 0.22 : 0.9),
+          minHeight: Math.max(64, Math.round(56 * Math.min(fontScale, 1.5))),
+          shadowColor: '#000000',
+          shadowOpacity: currentScheme() === 'dark' ? 0.45 : 0.14,
+          shadowRadius: 16,
+          shadowOffset: { width: 0, height: -6 },
+          elevation: 12,
+        },
+        tabBarItemStyle: { minHeight: 44 },
         tabBarAllowFontScaling: false,
         tabBarLabelStyle: { fontSize: tabFs(11), fontWeight: '600', letterSpacing: 0.1 },
-        headerStyle: { backgroundColor: t.bg },
-        headerShadowVisible: false,
+        headerStyle: { backgroundColor: alpha(t.surface, 0.94) },
+        headerShadowVisible: true,
         headerTitleStyle: { color: t.text, fontWeight: '700' },
         headerRight: () => <IconButton icon="settings-outline" label="Réglages société" onPress={() => router.push('/settings')} />,
       }}
     >
-      <Tabs.Screen name="index" options={{ title: tr(L, 'dashboard'), tabBarIcon: icon('stats-chart-outline') }} />
+      <Tabs.Screen name="index" options={{ title: tr(L, 'dashboard'), tabBarLabel: 'Accueil', headerTitle: tr(L, 'dashboard'), tabBarIcon: icon('stats-chart-outline') }} />
       <Tabs.Screen name="accounts" options={{ title: tr(L, 'accounts'), tabBarIcon: icon('business-outline') }} />
       <Tabs.Screen name="pipeline" options={{ title: tr(L, 'pipeline'), tabBarIcon: icon('git-network-outline') }} />
       <Tabs.Screen name="sales" options={{ title: tr(L, 'sales'), tabBarIcon: icon('document-text-outline') }} />
