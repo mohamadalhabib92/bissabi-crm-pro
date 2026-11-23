@@ -1,6 +1,7 @@
 import { appendAudit, type AuditEvent } from './audit';
 import { mergeCounters, raiseCounters } from './numbering';
 import { DEFAULT_COMPANY, isDemo, type Account, type Company, type CreditNote, type Expense, type Invoice, type Offer, type Product } from './model';
+import { isFutureSchema, quarantineOriginal, type QuarantineEntry } from './preserve';
 import { SEED_ACCOUNTS, SEED_EXPENSES, SEED_INVOICES, SEED_OFFERS } from './seed';
 import { uid } from './uid';
 
@@ -41,6 +42,10 @@ export interface Kv {
   get(key: string): Promise<string | null>;
   set(key: string, value: string): Promise<void>;
 }
+
+export type LoadResult =
+  | { store: Store; persisted: boolean; preserveOnly: boolean }
+  | { error: string; quarantine?: QuarantineEntry };
 
 export function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -320,7 +325,11 @@ function fail(label: string): string {
   return `La clé « ${label} » est illisible. Aucune donnée n’a été réécrite.`;
 }
 
-async function loadAndMigrateBody(kv: Kv, now: string): Promise<{ store: Store; persisted: boolean } | { error: string }> {
+async function unreadable(key: string, original: string, reason: 'json-parse' | 'shape'): Promise<LoadResult> {
+  return { error: fail(key), quarantine: await quarantineOriginal(key, original, reason) };
+}
+
+async function loadAndMigrateBody(kv: Kv, now: string): Promise<LoadResult> {
   const raw: Partial<Record<StoreKey, string>> = {};
   const parsed: Partial<Record<StoreKey, unknown>> = {};
   for (const key of STORE_KEYS) {
@@ -335,7 +344,7 @@ async function loadAndMigrateBody(kv: Kv, now: string): Promise<{ store: Store; 
     try {
       parsed[key] = JSON.parse(text);
     } catch {
-      return { error: fail(key) };
+      return unreadable(key, text, 'json-parse');
     }
   }
 
@@ -345,15 +354,15 @@ async function loadAndMigrateBody(kv: Kv, now: string): Promise<{ store: Store; 
       audit: Array.isArray(parsed.audit) ? (parsed.audit as AuditEvent[]) : [],
       backups: Array.isArray(parsed.backups) ? (parsed.backups as BackupRecord[]) : [],
     });
-    return { store, persisted: false };
+    return { store, persisted: false, preserveOnly: false };
   }
 
   for (const key of ['accounts', 'offers', 'invoices', 'expenses', 'products', 'creditNotes', 'audit', 'backups'] as const) {
-    if (parsed[key] !== undefined && !Array.isArray(parsed[key])) return { error: fail(key) };
+    if (parsed[key] !== undefined && !Array.isArray(parsed[key])) return unreadable(key, raw[key] ?? '', 'shape');
   }
-  if (parsed.counters !== undefined && !asRecord(parsed.counters)) return { error: fail('counters') };
-  if (parsed.company !== undefined && !asRecord(parsed.company)) return { error: fail('company') };
-  if (parsed.schemaVersion !== undefined && typeof parsed.schemaVersion !== 'number') return { error: fail('schemaVersion') };
+  if (parsed.counters !== undefined && !asRecord(parsed.counters)) return unreadable('counters', raw.counters ?? '', 'shape');
+  if (parsed.company !== undefined && !asRecord(parsed.company)) return unreadable('company', raw.company ?? '', 'shape');
+  if (parsed.schemaVersion !== undefined && typeof parsed.schemaVersion !== 'number') return unreadable('schemaVersion', raw.schemaVersion ?? '', 'shape');
 
   // Ne pas fusionner les valeurs par défaut avant le snapshot : la sauvegarde doit être le JSON d’origine.
   const company = (parsed.company as Company | undefined) ?? { ...DEFAULT_COMPANY };
@@ -372,7 +381,8 @@ async function loadAndMigrateBody(kv: Kv, now: string): Promise<{ store: Store; 
   };
 
   const result = applySchemaMigration(store, now);
-  if (!result.changed) return { store: result.store, persisted: true };
+  if (isFutureSchema(store.schemaVersion, SCHEMA_VERSION)) return { store: result.store, persisted: true, preserveOnly: true };
+  if (!result.changed) return { store: result.store, persisted: true, preserveOnly: false };
 
   const next = result.store;
   const preMigration = [...next.backups].reverse().find((b) => b.reason === 'pre-migration');
@@ -392,7 +402,7 @@ async function loadAndMigrateBody(kv: Kv, now: string): Promise<{ store: Store; 
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'Écriture de la migration impossible. Le schéma n’a pas été avancé si la sauvegarde a échoué.' };
   }
-  return { store: next, persisted: true };
+  return { store: next, persisted: true, preserveOnly: false };
 }
 
 function parseBackupList(raw: string | null): BackupRecord[] {
@@ -408,7 +418,7 @@ function parseBackupList(raw: string | null): BackupRecord[] {
 let loadQueue: Promise<unknown> = Promise.resolve();
 
 /** Une seule lecture / migration à la fois : la suivante attend la fin de la précédente. */
-export function loadAndMigrate(kv: Kv, now: string): Promise<{ store: Store; persisted: boolean } | { error: string }> {
+export function loadAndMigrate(kv: Kv, now: string): Promise<LoadResult> {
   const run = loadQueue.then(() => loadAndMigrateBody(kv, now));
   loadQueue = run.then(() => undefined, () => undefined);
   return run;

@@ -28,7 +28,11 @@ export function BissabiImportButton({ onCompany }: { onCompany?: (c: Company) =>
       })));
       const { next, report: rep } = applyBissabiImport(
         { accounts: d.accounts, invoices: d.invoices, expenses: d.expenses, products: d.products, company: d.company }, files);
-      d.setAccounts(next.accounts); d.setInvoices(next.invoices); d.setExpenses(next.expenses); d.setProducts(next.products); d.setCompany(next.company);
+      const wrote = [d.setAccounts(next.accounts), d.setInvoices(next.invoices), d.setExpenses(next.expenses), d.setProducts(next.products), d.setCompany(next.company)];
+      if (wrote.some((ok) => !ok)) {
+        setErr('Rien n’a été écrit.');
+        return;
+      }
       onCompany?.(next.company);
       setReport(rep);
     } catch (e) {

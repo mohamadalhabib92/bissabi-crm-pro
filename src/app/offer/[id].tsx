@@ -8,13 +8,15 @@ import { useData } from '@/lib/data';
 import { mailto, offerHtml } from '@/lib/documents';
 import { addDays, chf, parseDate, dateCH, todayISO } from '@/lib/format';
 import { OFFER_STATUS, totals, type Offer } from '@/lib/model';
+import { canConvertOffer } from '@/lib/offers';
 import { printHtml } from '@/lib/print';
 import { uid } from '@/lib/storage';
-import { Badge, Button, DemoBanner, Field, H2, Muted, Notice, Row, Screen, Spacer } from '@/ui/kit';
+import { Badge, Button, DemoBanner, Field, H2, Muted, Notice, Row, Screen, Spacer, useFeedback } from '@/ui/kit';
 
 export default function OfferScreen() {
   const { id, accountId } = useLocalSearchParams<{ id: string; accountId?: string }>();
   const { offers, setOffers, accounts, company, nextNumber, convertOfferToInvoice } = useData();
+  const fb = useFeedback();
   const router = useRouter();
   const nav = useNavigation();
   const existing = offers.find((o) => o.id === id);
@@ -37,7 +39,8 @@ export default function OfferScreen() {
     if (!v) return setErr('Date de validité invalide (JJ.MM.AAAA).'), null;
     setErr('');
     const rec: Offer = { ...o, ...patch, validUntil: v, number: o.number || nextNumber('OF'), lines: o.lines.filter((l) => l.description.trim()) };
-    setOffers((l) => (l.some((x) => x.id === rec.id) ? l.map((x) => (x.id === rec.id ? rec : x)) : [rec, ...l]));
+    const wrote = setOffers((l) => (l.some((x) => x.id === rec.id) ? l.map((x) => (x.id === rec.id ? rec : x)) : [rec, ...l]));
+    if (!wrote) return setErr('Rien n’a été écrit.'), null;
     setO(rec);
     return rec;
   };
@@ -49,9 +52,18 @@ export default function OfferScreen() {
     if (acc?.contact_email) void Linking.openURL(mailto(acc.contact_email, `Offre ${rec.number} — Bissabi`, `Bonjour${acc.contact_nom ? ' ' + acc.contact_nom : ''},\n\nVeuillez trouver ci-joint notre offre ${rec.number} d’un montant de ${chf(totals(rec.lines, rec.vat).ttc)}, valable jusqu’au ${dateCH(rec.validUntil)}.\n\nAu plaisir de vous faire découvrir nos boissons botaniques.\n\nBien cordialement,\nBissabi`));
   };
 
+  const convert = () => {
+    const r = persist();
+    if (!r) return;
+    const inv = convertOfferToInvoice(r);
+    if (!inv) return setErr('Rien n’a été écrit.');
+    fb.toast({ text: 'Facture créée depuis l’offre', icon: 'document-text-outline' });
+    router.replace({ pathname: '/invoice/[id]', params: { id: inv } });
+  };
+
   const duplicate = () => {
     const copy: Offer = { ...o, id: uid('of_'), number: nextNumber('OF'), date: todayISO(), validUntil: addDays(todayISO(), 30), status: 'draft', invoiceId: undefined, demo: o.demo === true ? true : undefined, lines: o.lines.map((l) => ({ ...l, id: uid('l') })) };
-    setOffers((l) => [copy, ...l]);
+    if (!setOffers((l) => [copy, ...l])) return setErr('Rien n’a été écrit.');
     router.replace({ pathname: '/offer/[id]', params: { id: copy.id } });
   };
 
@@ -70,8 +82,14 @@ export default function OfferScreen() {
       <Spacer />
       <Field label="Remarques (imprimées)" value={o.notes} onChangeText={(v) => setO({ ...o, notes: v })} multiline editable={!locked} />
       {err ? <Notice tone="danger" title={err} /> : null}
+      {canConvertOffer(o) ? <Button icon="swap-horizontal" title="Convertir en facture" accessibilityLabel="Convertir cette offre en facture" onPress={convert} /> : null}
+      <Spacer h={8} />
       <Row wrap>
-        {!locked ? <Button title="Enregistrer" icon="checkmark" onPress={() => persist() && router.back()} /> : null}
+        {!locked ? <Button title="Enregistrer" icon="checkmark" onPress={() => {
+              if (!persist()) return;
+              fb.toast('Offre enregistrée');
+              router.back();
+            }} /> : null}
         <Button variant="secondary" icon="paper-plane-outline" title="Envoyer (PDF + e-mail)" onPress={send} />
         <Button variant="ghost" icon="print-outline" title="Aperçu PDF" onPress={() => { const r = persist(); if (r) void printHtml(offerHtml(company, acc, r)); }} />
       </Row>
@@ -80,16 +98,13 @@ export default function OfferScreen() {
       <Row wrap>
         {o.status === 'sent' ? (
           <>
-            <Button small variant="secondary" icon="thumbs-up-outline" title="Acceptée" onPress={() => persist({ status: 'accepted' })} />
+            <Button small variant="secondary" icon="thumbs-up-outline" title="Acceptée" onPress={() => persist({ status: 'accepted' }) && fb.celebrate({ title: 'Offre acceptée', subtitle: 'Bravo — prête à être facturée.', icon: 'ribbon-outline', tone: 'gold' })} />
             <Button small variant="ghost" icon="thumbs-down-outline" title="Refusée" onPress={() => persist({ status: 'refused' })} />
           </>
         ) : null}
-        {o.number && !locked ? (
-          <Button small icon="swap-horizontal" title="Convertir en facture" onPress={() => { const r = persist(); if (r) { const inv = convertOfferToInvoice(r); router.replace({ pathname: '/invoice/[id]', params: { id: inv } }); } }} />
-        ) : null}
         {o.invoiceId ? <Button small variant="secondary" icon="receipt-outline" title="Voir la facture" onPress={() => router.push({ pathname: '/invoice/[id]', params: { id: o.invoiceId! } })} /> : null}
         {o.number ? <Button small variant="ghost" icon="copy-outline" title="Dupliquer" onPress={duplicate} /> : null}
-        {existing && !locked ? <Button small variant="danger" icon="trash-outline" title="Supprimer" onPress={() => confirmAsk('Supprimer l’offre ?', o.number, () => { setOffers((l) => l.filter((x) => x.id !== o.id)); router.back(); })} /> : null}
+        {existing && !locked ? <Button small variant="danger" icon="trash-outline" title="Supprimer" onPress={() => confirmAsk('Supprimer l’offre ?', o.number, () => { if (setOffers((l) => l.filter((x) => x.id !== o.id))) router.back(); else setErr('Rien n’a été écrit.'); })} /> : null}
       </Row>
     </Screen>
   );
