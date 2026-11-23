@@ -8,6 +8,7 @@ import { useData } from '@/lib/data';
 import { mailto, offerHtml } from '@/lib/documents';
 import { addDays, chf, parseDate, dateCH, todayISO } from '@/lib/format';
 import { OFFER_STATUS, totals, type Offer } from '@/lib/model';
+import { canConvertOffer } from '@/lib/offers';
 import { printHtml } from '@/lib/print';
 import { uid } from '@/lib/storage';
 import { Badge, Button, DemoBanner, Field, H2, Muted, Notice, Row, Screen, Spacer, useFeedback } from '@/ui/kit';
@@ -51,6 +52,15 @@ export default function OfferScreen() {
     if (acc?.contact_email) void Linking.openURL(mailto(acc.contact_email, `Offre ${rec.number} — Bissabi`, `Bonjour${acc.contact_nom ? ' ' + acc.contact_nom : ''},\n\nVeuillez trouver ci-joint notre offre ${rec.number} d’un montant de ${chf(totals(rec.lines, rec.vat).ttc)}, valable jusqu’au ${dateCH(rec.validUntil)}.\n\nAu plaisir de vous faire découvrir nos boissons botaniques.\n\nBien cordialement,\nBissabi`));
   };
 
+  const convert = () => {
+    const r = persist();
+    if (!r) return;
+    const inv = convertOfferToInvoice(r);
+    if (!inv) return setErr('Rien n’a été écrit.');
+    fb.toast({ text: 'Facture créée depuis l’offre', icon: 'document-text-outline' });
+    router.replace({ pathname: '/invoice/[id]', params: { id: inv } });
+  };
+
   const duplicate = () => {
     const copy: Offer = { ...o, id: uid('of_'), number: nextNumber('OF'), date: todayISO(), validUntil: addDays(todayISO(), 30), status: 'draft', invoiceId: undefined, demo: o.demo === true ? true : undefined, lines: o.lines.map((l) => ({ ...l, id: uid('l') })) };
     if (!setOffers((l) => [copy, ...l])) return setErr('Rien n’a été écrit.');
@@ -72,6 +82,8 @@ export default function OfferScreen() {
       <Spacer />
       <Field label="Remarques (imprimées)" value={o.notes} onChangeText={(v) => setO({ ...o, notes: v })} multiline editable={!locked} />
       {err ? <Notice tone="danger" title={err} /> : null}
+      {canConvertOffer(o) ? <Button icon="swap-horizontal" title="Convertir en facture" accessibilityLabel="Convertir cette offre en facture" onPress={convert} /> : null}
+      <Spacer h={8} />
       <Row wrap>
         {!locked ? <Button title="Enregistrer" icon="checkmark" onPress={() => {
               if (!persist()) return;
@@ -89,9 +101,6 @@ export default function OfferScreen() {
             <Button small variant="secondary" icon="thumbs-up-outline" title="Acceptée" onPress={() => persist({ status: 'accepted' }) && fb.celebrate({ title: 'Offre acceptée', subtitle: 'Bravo — prête à être facturée.', icon: 'ribbon-outline', tone: 'gold' })} />
             <Button small variant="ghost" icon="thumbs-down-outline" title="Refusée" onPress={() => persist({ status: 'refused' })} />
           </>
-        ) : null}
-        {o.number && !locked ? (
-          <Button small icon="swap-horizontal" title="Convertir en facture" onPress={() => { const r = persist(); if (!r) return; const inv = convertOfferToInvoice(r); if (!inv) return setErr('Rien n’a été écrit.'); fb.toast({ text: 'Facture créée depuis l’offre', icon: 'document-text-outline' }); router.replace({ pathname: '/invoice/[id]', params: { id: inv } }); }} />
         ) : null}
         {o.invoiceId ? <Button small variant="secondary" icon="receipt-outline" title="Voir la facture" onPress={() => router.push({ pathname: '/invoice/[id]', params: { id: o.invoiceId! } })} /> : null}
         {o.number ? <Button small variant="ghost" icon="copy-outline" title="Dupliquer" onPress={duplicate} /> : null}

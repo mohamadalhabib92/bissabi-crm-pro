@@ -1,7 +1,7 @@
 import { formatIban, isPlaceholderIban } from './iban';
 import { GREEN_LOGO_SVG } from './logo';
 import { chf, dateCH } from './format';
-import { buildQrBill, PAYMENT_BAND_MM, PAYMENT_WIDTH_MM, QR_PRINT_MM, qrSvg, RECEIPT_WIDTH_MM } from './qrbill';
+import { buildQrBill, PAYMENT_BAND_MM, PAYMENT_WIDTH_MM, QR_PRINT_MM, qrBoxStyle, qrSvg, RECEIPT_WIDTH_MM } from './qrbill';
 import { isHoreca, totals, visibleVatNumber, type Account, type Company, type CreditNote, type Invoice, type Offer } from './model';
 import { theme } from '../ui/theme';
 
@@ -37,12 +37,18 @@ td{padding:7px 4px;border-bottom:1px solid ${theme.border}}.r{text-align:right;f
 .foot{position:absolute;left:8mm;right:8mm;bottom:${PAYMENT_BAND_MM}mm;min-height:8mm;display:flex;justify-content:space-between;align-items:flex-end;gap:4mm;font-size:8pt;color:${theme.muted};padding-bottom:1.5mm}
 .scan{font-size:8.5pt;font-weight:700;color:${theme.primary};text-align:right}
 .warn{background:${theme.warningBg};color:${theme.warning};padding:2mm 3mm;border-radius:2mm;font-size:7.5pt;margin-top:2mm}
-.qr{position:absolute;left:0;right:0;bottom:0;height:${PAYMENT_BAND_MM}mm;border-top:1px dashed ${theme.qrInk};display:flex;font-size:8pt;background:${theme.qrPaper}}
+.qr{position:absolute;left:0;right:0;bottom:0;height:${PAYMENT_BAND_MM}mm;width:210mm;border-top:1px dashed ${theme.qrInk};display:flex;font-size:8pt;background:${theme.qrPaper}}
 .scissors{position:absolute;top:-2.6mm;left:2mm;font-size:10pt;line-height:1;background:${theme.qrPaper};padding:0 1mm}
-.rec{width:${RECEIPT_WIDTH_MM}mm;padding:5mm;border-right:1px dashed ${theme.qrInk};position:relative}
+.rec{width:${RECEIPT_WIDTH_MM}mm;height:${PAYMENT_BAND_MM}mm;flex:0 0 ${RECEIPT_WIDTH_MM}mm;padding:5mm;border-right:1px dashed ${theme.qrInk};position:relative;box-sizing:border-box}
 .rec .vcut{position:absolute;top:-2.6mm;right:-2.2mm;background:${theme.qrPaper};font-size:10pt;line-height:1}
-.pay{width:${PAYMENT_WIDTH_MM}mm;padding:5mm;display:flex;gap:5mm}
-.qh{font-weight:700;font-size:11pt;margin-bottom:3mm}
+.pay{width:${PAYMENT_WIDTH_MM}mm;height:${PAYMENT_BAND_MM}mm;flex:0 0 ${PAYMENT_WIDTH_MM}mm;padding:5mm;box-sizing:border-box;display:flex;flex-direction:column}
+.payrow{display:flex;gap:5mm;align-items:flex-start}
+.qrbox{${qrBoxStyle(QR_PRINT_MM)}}
+.qrbox svg{display:block}
+.payinfo{flex:1;min-width:0;font-size:10pt;line-height:1.35}
+.payamt{display:flex;gap:4mm;margin-top:2mm}
+.payamt b{font-size:11pt;font-weight:700}
+.qh{font-weight:700;font-size:11pt;margin:0 0 3mm}
 .lb{font-weight:700;font-size:6pt;margin-top:2.5mm}
 </style></head><body>${body}<script>window.onload=function(){setTimeout(function(){window.focus();window.print()},300)}</script></body></html>`;
 }
@@ -97,9 +103,9 @@ ${outside}
 <div class="foot"><div>${esc(c.name)} · ${esc(companyAddress(c))} · UID ${esc(c.uid)}${inv.vat.apply ? '' : ' · TVA non applicable'}</div><div class="scan">Scannez pour payer (TWINT / e-banking)</div></div>
 <div class="qr"><span class="scissors">✂</span><div class="rec"><span class="vcut">✂</span><div class="qh">Récépissé</div><div class="lb">Compte / Payable à</div>${cred}<div class="lb">Référence</div>${ref}
 <div class="lb">Payable par</div>${deb || '—'}<div style="display:flex;gap:8mm;margin-top:6mm"><div><div class="lb">Monnaie</div>CHF</div><div><div class="lb">Montant</div>${chf(tot.ttc, false)}</div></div><div class="lb" style="text-align:right;margin-top:6mm">Point de dépôt</div></div>
-<div class="pay" style="flex-wrap:wrap"><div class="qh" style="width:100%">Section paiement</div><div>${qrSvg(qb.payload, QR_PRINT_MM, specimen)}
-<div style="display:flex;gap:8mm;margin-top:3mm"><div><div class="lb">Monnaie</div>CHF</div><div><div class="lb">Montant</div>${chf(tot.ttc, false)}</div></div></div>
-<div style="line-height:1.4"><div class="lb">Compte / Payable à</div>${cred}<div class="lb">Référence</div>${ref}<div class="lb">Informations supplémentaires</div>${esc(qb.message)}<div class="lb">Payable par</div>${deb || '—'}</div></div></div></div>`,
+<div class="pay"><div class="qh">Section paiement</div><div class="payrow"><div><div class="qrbox">${qrSvg(qb.payload, QR_PRINT_MM, specimen)}</div>
+<div class="payamt"><div><div class="lb">Monnaie</div>CHF</div><div><div class="lb">Montant</div><b>${chf(tot.ttc, false)}</b></div></div></div>
+<div class="payinfo"><div class="lb">Compte / Payable à</div>${cred}<div class="lb">Référence</div>${ref}<div class="lb">Informations supplémentaires</div>${esc(qb.message)}<div class="lb">Payable par</div>${deb || '—'}</div></div></div></div></div>`,
   );
 }
 

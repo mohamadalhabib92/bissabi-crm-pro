@@ -5,6 +5,7 @@ import { useData } from '@/lib/data';
 import { downloadText } from '@/lib/download';
 import { chf, dateCH, todayISO } from '@/lib/format';
 import { INVOICE_STATUS, OFFER_STATUS, isOpenStatus, totals, type InvoiceStatus, type OfferStatus } from '@/lib/model';
+import { canConvertOffer } from '@/lib/offers';
 import { vatCSV } from '@/lib/vatExport';
 import { Badge, Button, Card, Divider, Empty, H2, ListItem, Row, Screen, Segmented, Spacer } from '@/ui/kit';
 import { theme as t } from '@/ui/theme';
@@ -13,7 +14,7 @@ const OT: Record<OfferStatus, 'neutral' | 'info' | 'success' | 'danger'> = { dra
 const IT: Record<InvoiceStatus, 'neutral' | 'info' | 'success' | 'danger' | 'warning'> = { draft: 'neutral', issued: 'info', sent: 'info', partial: 'warning', paid: 'success', cancelled: 'danger' };
 
 export default function Sales() {
-  const { offers, invoices, accounts, creditNotes } = useData();
+  const { offers, invoices, accounts, creditNotes, convertOfferToInvoice } = useData();
   const router = useRouter();
   const [tab, setTab] = useState<'offers' | 'invoices'>('invoices');
   const name = (id: string) => accounts.find((a) => a.id === id)?.nom ?? 'Client supprimé';
@@ -38,6 +39,12 @@ export default function Sales() {
               <Frag key={o.id}>
                 {i ? <Divider /> : null}
                 <ListItem title={`${o.number} · ${name(o.accountId)}`} subtitle={`${dateCH(o.date)} · ${chf(totals(o.lines, o.vat).ttc)}${o.demo ? ' · démo' : ''}`} right={<Badge label={OFFER_STATUS[o.status]} tone={OT[o.status]} />} onPress={() => router.push({ pathname: '/offer/[id]', params: { id: o.id } })} />
+                {canConvertOffer(o) && (o.status === 'sent' || o.status === 'accepted') ? (
+                  <Button small icon="swap-horizontal" title="Facturer" accessibilityLabel={`Convertir l’offre ${o.number} en facture`} onPress={() => {
+                    const inv = convertOfferToInvoice(o);
+                    if (inv) router.push({ pathname: '/invoice/[id]', params: { id: inv } });
+                  }} />
+                ) : null}
               </Frag>
             ))}
           </Card>

@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { appendAudit } from './audit';
 import { decryptBackup, encryptBackup, fullCsv, plainExport } from './backup';
 import { addDays, todayISO } from './format';
+import { canConvertOffer, draftInvoiceFromOffer } from './offers';
 import {
   applyReset,
   applyRestore,
@@ -262,13 +263,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [allocate, mutate]);
 
   const convertOfferToInvoice = useCallback((o: Offer) => {
-    if (o.invoiceId) return o.invoiceId;
+    if (!canConvertOffer(o)) return o.invoiceId ?? null;
     const id = uid('fa_');
-    const inv: Invoice = {
-      id, number: '', accountId: o.accountId, date: todayISO(), dueDate: addDays(todayISO(), ref.current?.company.paymentDays || 30),
-      lines: o.lines.map((l) => ({ ...l, id: uid('l') })), vat: { ...o.vat }, status: 'draft', offerId: o.id, notes: '',
-      demo: o.demo === true ? true : undefined,
-    };
+    const inv: Invoice = draftInvoiceFromOffer(o, {
+      id,
+      date: todayISO(),
+      dueDate: addDays(todayISO(), ref.current?.company.paymentDays || 30),
+      lineIds: o.lines.map(() => uid('l')),
+    });
     const wrote = mutate((s) => ({
       ...s,
       invoices: [inv, ...s.invoices],

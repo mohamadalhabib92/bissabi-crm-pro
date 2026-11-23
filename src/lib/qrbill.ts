@@ -18,7 +18,8 @@ export type QrBillData = {
 
 /** QR imprimé 46 × 46 mm (croix suisse 7 × 7 mm). L’aperçu écran peut être plus petit. */
 export const QR_PRINT_MM = 46;
-export const SWISS_CROSS_RATIO = 7 / 46;
+export const SWISS_CROSS_MM = 7;
+export const SWISS_CROSS_RATIO = SWISS_CROSS_MM / QR_PRINT_MM;
 export const RECEIPT_WIDTH_MM = 62;
 export const PAYMENT_WIDTH_MM = 148;
 export const PAYMENT_BAND_MM = 105;
@@ -75,13 +76,23 @@ export function qrPath(payload: string): { size: number; d: string } {
   return { size, d };
 }
 
+/**
+ * Boîte du symbole : 46 × 46 mm, sans réduction flex ni max-width.
+ * Sans ce verrou, la colonne « informations » de la section paiement rétrécit le SVG
+ * (souvent vers ~35 mm) à l’impression.
+ */
+export function qrBoxStyle(mm = QR_PRINT_MM): string {
+  return `width:${mm}mm;height:${mm}mm;min-width:${mm}mm;min-height:${mm}mm;max-width:${mm}mm;max-height:${mm}mm;flex:0 0 ${mm}mm`;
+}
+
 /** SVG autonome (QR 46 mm + croix suisse 7 mm) pour PDF/HTML. */
 export function qrSvg(payload: string, mm = QR_PRINT_MM, specimen = false): string {
   const { size, d } = qrPath(payload);
   const { c, o, k } = swissCrossRect(size);
   const ink = theme.qrInk;
   const paper = theme.qrPaper;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${mm}mm" height="${mm}mm" viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges">
+  const box = qrBoxStyle(mm);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${mm}mm" height="${mm}mm" style="${box}" viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges">
 <rect width="${size}" height="${size}" fill="${paper}"/><path d="${d}" fill="${ink}"/>
 <rect x="${o}" y="${o}" width="${c}" height="${c}" fill="${paper}"/><rect x="${o + 2 * k}" y="${o + 2 * k}" width="${28 * k}" height="${28 * k}" fill="${ink}"/>
 <rect x="${o + 13 * k}" y="${o + 7 * k}" width="${6 * k}" height="${18 * k}" fill="${paper}"/><rect x="${o + 7 * k}" y="${o + 13 * k}" width="${18 * k}" height="${6 * k}" fill="${paper}"/>
