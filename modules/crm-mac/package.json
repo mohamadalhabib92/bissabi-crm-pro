@@ -1,0 +1,12 @@
+{
+  "name": "crm-mac",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Détecte une app iOS lancée sur Mac (ProcessInfo.isiOSAppOnMac) et les raccourcis Échap / Cmd+F.",
+  "main": "index.ts",
+  "peerDependencies": {
+    "expo": "*",
+    "react": "*",
+    "react-native": "*"
+  }
+}

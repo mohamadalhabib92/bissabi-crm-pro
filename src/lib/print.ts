@@ -1,8 +1,14 @@
 import * as Print from 'expo-print';
-import { Platform } from 'react-native';
+import { Alert, Platform } from 'react-native';
+import { isIosAppOnMac } from '@/lib/mac';
+import { macLimitMessage } from '@/lib/macLimits';
 
-/** Ouvre le document HTML pour impression / « Enregistrer en PDF ». */
+/** Ouvre le document HTML pour impression / « Enregistrer en PDF ». Sur Mac : message, aucun appel à expo-print. */
 export async function printHtml(html: string) {
+  if (isIosAppOnMac()) {
+    Alert.alert('Impression indisponible', macLimitMessage('print') ?? '');
+    return;
+  }
   if (Platform.OS === 'web') {
     const w = window.open('', '_blank');
     if (w) {

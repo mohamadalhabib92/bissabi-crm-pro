@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { BlurTargetView, BlurView } from 'expo-blur';
-import { createContext, useContext, useEffect, useRef, useState, type ComponentProps, type ComponentRef, type ReactNode, type RefObject } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ComponentProps, type ComponentRef, type ReactNode, type Ref, type RefObject } from 'react';
 import {
   Animated,
   ActivityIndicator,
@@ -17,6 +17,9 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { isIosAppOnMac } from '@/lib/mac';
+import { MAC_TYPE_SCALE } from '@/lib/shell';
+import { useShell } from '@/lib/useShell';
 import { useReducedTransparency } from './access';
 import { haptic } from './haptics';
 import { FadeIn, prefersReducedMotion, PressableScale } from './motion';
@@ -88,11 +91,24 @@ export { Ionicons };
 export { Breathing, FadeIn, PressableScale, ProgressBar, Skeleton, SkeletonList, useFeedback } from './motion';
 export { haptic } from './haptics';
 
-/** Conteneur d'écran défilant, largeur max sur desktop (PWA). */
-export function Screen({ children, scroll = true, padded = true }: { children: ReactNode; scroll?: boolean; padded?: boolean }) {
+function usePointerHover() {
+  const [hovered, setHovered] = useState(false);
+  return {
+    hovered,
+    bind: {
+      onHoverIn: () => setHovered(true),
+      onHoverOut: () => setHovered(false),
+    },
+  };
+}
+
+/** Conteneur d'écran défilant. Téléphone : 860 pt. Fenêtre large : 1040 pt, ou toute la largeur si `spread`. */
+export function Screen({ children, scroll = true, padded = true, spread = false }: { children: ReactNode; scroll?: boolean; padded?: boolean; spread?: boolean }) {
   const insets = useSafeAreaInsets();
+  const shell = useShell();
+  const maxWidth = spread && shell.listSpread ? '100%' : shell.contentMax;
   const inner = (
-    <View style={[S().inner, padded && { padding: space.lg }, { paddingBottom: space.xl + insets.bottom }]}>{children}</View>
+    <View style={[S().inner, { maxWidth }, padded && { padding: space.lg }, { paddingBottom: space.xl + insets.bottom }]}>{children}</View>
   );
   return (
     <VerreFrame>
@@ -137,12 +153,14 @@ export function Eyebrow({ children, style }: { children: ReactNode; style?: Styl
 
 export function Card({ children, style, onPress, accessibilityLabel }: { children: ReactNode; style?: StyleProp<ViewStyle>; onPress?: () => void; accessibilityLabel?: string }) {
   const [pressed, setPressed] = useState(false);
+  const hover = usePointerHover();
   const shell: StyleProp<ViewStyle> = [
     S().card,
     { backgroundColor: 'transparent', padding: 0, overflow: 'hidden' },
     ambientShadow(pressed),
     keyShadow(pressed),
     pressed && { transform: [{ translateY: sinkOffset(true) }] },
+    hover.hovered && onPress && { borderColor: t.primary },
     style,
   ];
   const body = <GlassFill pressed={pressed}>{children}</GlassFill>;
@@ -154,6 +172,7 @@ export function Card({ children, style, onPress, accessibilityLabel }: { childre
         onPressOut={() => setPressed(false)}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
+        {...hover.bind}
         style={shell}
       >
         {body}
@@ -204,6 +223,7 @@ export function Button({
   const fg = { primary: t.onPrimary, secondary: t.text, ghost: t.primary, danger: t.onDanger }[variant];
   const off = disabled || loading;
   const [pressed, setPressed] = useState(false);
+  const hover = usePointerHover();
   const down = pressed && !off;
   return (
     <View style={[{ borderRadius: t.radius - 2 }, ambientShadow(down), style]}>
@@ -211,6 +231,7 @@ export function Button({
         onPress={off ? undefined : () => { haptic(variant === 'danger' ? 'warning' : 'tap'); onPress?.(); }}
         onPressIn={() => setPressed(true)}
         onPressOut={() => setPressed(false)}
+        {...hover.bind}
         disabled={!!off}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel ?? title}
@@ -229,6 +250,7 @@ export function Button({
           },
           keyShadow(down),
           variant === 'ghost' && { borderLeftWidth: 1, borderRightWidth: 1, borderColor: t.border, borderTopColor: sheenColor(down), borderBottomColor: shadeEdge(down) },
+          hover.hovered && !off && { borderWidth: 2, borderColor: t.accent },
           off && { opacity: 0.45 },
         ]}
       >
@@ -247,12 +269,14 @@ export function Button({
 
 export function IconButton({ icon, onPress, label, color = t.text, size = 22 }: { icon: IconName; onPress: () => void; label: string; color?: string; size?: number }) {
   const [pressed, setPressed] = useState(false);
+  const hover = usePointerHover();
   const flat = useReducedTransparency();
   return (
     <Pressable
       onPress={() => { haptic('tap'); onPress(); }}
       onPressIn={() => setPressed(true)}
       onPressOut={() => setPressed(false)}
+      {...hover.bind}
       accessibilityRole="button"
       accessibilityLabel={label}
       style={[
@@ -260,7 +284,7 @@ export function IconButton({ icon, onPress, label, color = t.text, size = 22 }: 
         ambientShadow(pressed),
         keyShadow(pressed),
         {
-          backgroundColor: pressed ? t.surfaceAlt : flat ? t.surface : alpha(t.surface, GLASS_ALPHA),
+          backgroundColor: pressed || hover.hovered ? t.surfaceAlt : flat ? t.surface : alpha(t.surface, GLASS_ALPHA),
           borderTopWidth: 1,
           borderTopColor: sheenColor(pressed),
           borderBottomWidth: 1,
@@ -276,16 +300,19 @@ export function IconButton({ icon, onPress, label, color = t.text, size = 22 }: 
 
 export function Chip({ label, active, onPress, color }: { label: string; active?: boolean; onPress?: () => void; color?: string }) {
   const c = color ?? t.primary;
+  const [hovered, setHovered] = useState(false);
   return (
     <PressableScale
       hapticKind="select"
       scaleTo={0.95}
       onPress={onPress}
+      onHoverIn={() => setHovered(true)}
+      onHoverOut={() => setHovered(false)}
       accessibilityRole="button"
       accessibilityState={{ selected: !!active }}
       style={({ pressed }) => [
         S().chip,
-        { borderColor: active ? c : t.border, backgroundColor: active ? c : 'transparent' },
+        { borderColor: active ? c : hovered ? t.primary : t.border, backgroundColor: active ? c : hovered ? t.surfaceAlt : 'transparent' },
         active && { borderTopWidth: 1, borderTopColor: sheenColor(!!pressed), borderBottomColor: shadeEdge(!!pressed), ...ambientShadow(!!pressed) },
         pressed && { transform: [{ translateY: sinkOffset(true) }] },
       ]}
@@ -311,12 +338,13 @@ export function Badge({ label, tone = 'neutral' }: { label: string; tone?: 'neut
   );
 }
 
-export function Field({ label, hint, error, style, ...props }: TextInputProps & { label: string; hint?: string; error?: string | null }) {
+export function Field({ label, hint, error, style, inputRef, ...props }: TextInputProps & { label: string; hint?: string; error?: string | null; inputRef?: Ref<ComponentRef<typeof TextInput>> }) {
   const [focused, setFocused] = useState(false);
   return (
     <View style={{ marginBottom: 14 }}>
       <Text style={S().label}>{label}</Text>
       <TextInput
+        ref={inputRef}
         placeholderTextColor={t.muted}
         accessibilityLabel={label}
         style={[S().input, props.multiline && { minHeight: 88, textAlignVertical: 'top', paddingTop: 12 }, focused && !error ? { borderColor: t.primary, borderWidth: 1.5 } : null, error ? { borderColor: t.danger } : null, style]}
@@ -441,13 +469,16 @@ export function Notice({ tone = 'info', title, text, icon }: { tone?: 'info' | '
 
 export function ListItem({ title, subtitle, right, icon, onPress }: { title: string; subtitle?: string; right?: ReactNode; icon?: IconName; onPress?: () => void }) {
   const label = subtitle ? `${title}, ${subtitle}` : title;
+  const [hovered, setHovered] = useState(false);
   return (
     <Pressable
       onPress={onPress}
       disabled={!onPress}
+      onHoverIn={() => setHovered(true)}
+      onHoverOut={() => setHovered(false)}
       accessibilityRole={onPress ? 'button' : 'text'}
       accessibilityLabel={label}
-      style={({ pressed }) => [S().li, pressed && onPress && { backgroundColor: t.surfaceAlt }]}
+      style={({ pressed }) => [S().li, (pressed || hovered) && onPress && { backgroundColor: t.surfaceAlt }]}
     >
       {icon ? (
         <View style={S().liIcon}>
@@ -475,11 +506,12 @@ export function Divider() {
 }
 
 export function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  const { typeScale } = useShell();
   return (
     <View accessible accessibilityLabel={sub ? `${label} : ${value}. ${sub}` : `${label} : ${value}`} style={{ flex: 1, minWidth: 140, alignSelf: 'stretch' }}>
       <Card style={{ flex: 1, marginBottom: 0 }}>
-        <Muted style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.8 }}>{label}</Muted>
-        <Text maxFontSizeMultiplier={1.8} style={{ color: t.text, fontSize: 24, fontWeight: '700', letterSpacing: -0.4, marginTop: 6, fontVariant: ['tabular-nums'] }}>{value}</Text>
+        <Muted style={{ fontSize: Math.round(12 * typeScale), textTransform: 'uppercase', letterSpacing: 0.8 }}>{label}</Muted>
+        <Text maxFontSizeMultiplier={1.8} style={{ color: t.text, fontSize: Math.round(24 * typeScale), fontWeight: '700', letterSpacing: -0.4, marginTop: 6, fontVariant: ['tabular-nums'] }}>{value}</Text>
         {sub ? <Muted style={{ fontSize: 12, marginTop: 2 }}>{sub}</Muted> : null}
       </Card>
     </View>
@@ -508,14 +540,16 @@ export function shadow(level = 1): ViewStyle {
 }
 
 function makeStyles() {
+  const scale = isIosAppOnMac() ? MAC_TYPE_SCALE : 1;
+  const px = (n: number) => Math.round(n * scale);
   return StyleSheet.create({
   screen: { flex: 1, backgroundColor: t.bg },
   inner: { width: '100%', maxWidth: 860, alignSelf: 'center' },
-  h1: { color: t.text, ...typo.title, marginBottom: space.xxs, fontFamily: t.displayFont },
-  h2: { color: t.text, ...typo.headline, marginBottom: space.xs },
-  body: { color: t.text, ...typo.body },
-  muted: { color: t.muted, ...typo.callout },
-  eyebrow: { color: t.primary, ...typo.overline, textTransform: 'uppercase', marginBottom: space.xxs, borderBottomWidth: 2, borderBottomColor: t.accent, alignSelf: 'flex-start', paddingBottom: 2 },
+  h1: { color: t.text, ...typo.title, fontSize: px(typo.title.fontSize), lineHeight: px(typo.title.lineHeight), marginBottom: space.xxs, fontFamily: t.displayFont },
+  h2: { color: t.text, ...typo.headline, fontSize: px(typo.headline.fontSize), lineHeight: px(typo.headline.lineHeight), marginBottom: space.xs },
+  body: { color: t.text, ...typo.body, fontSize: px(typo.body.fontSize), lineHeight: px(typo.body.lineHeight) },
+  muted: { color: t.muted, ...typo.callout, fontSize: px(typo.callout.fontSize), lineHeight: px(typo.callout.lineHeight) },
+  eyebrow: { color: t.primary, ...typo.overline, fontSize: px(typo.overline.fontSize), lineHeight: px(typo.overline.lineHeight), textTransform: 'uppercase', marginBottom: space.xxs, borderBottomWidth: 2, borderBottomColor: t.accent, alignSelf: 'flex-start', paddingBottom: 2 },
   card: {
     backgroundColor: t.surface,
     borderRadius: t.radius,
@@ -536,11 +570,11 @@ function makeStyles() {
     gap: 8,
   },
   btnSmall: { minHeight: 44, paddingHorizontal: 14 },
-  btnText: { fontSize: 16, fontWeight: '700', letterSpacing: 0.2, textAlign: 'center', flexShrink: 1 },
+  btnText: { fontSize: px(16), fontWeight: '700', letterSpacing: 0.2, textAlign: 'center', flexShrink: 1 },
   iconBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   chip: { minHeight: 44, maxWidth: '100%', paddingVertical: 6, paddingHorizontal: 14, borderRadius: 22, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, alignSelf: 'flex-start' },
-  label: { color: t.muted, fontSize: 13, fontWeight: '600', marginBottom: 6, letterSpacing: 0.3 },
+  label: { color: t.muted, fontSize: px(13), fontWeight: '600', marginBottom: 6, letterSpacing: 0.3 },
   input: {
     minHeight: 48,
     borderWidth: 1,
@@ -549,7 +583,7 @@ function makeStyles() {
     paddingHorizontal: 14,
     color: t.text,
     backgroundColor: t.surface,
-    fontSize: 16,
+    fontSize: px(16),
   },
   segment: { flexDirection: 'row', backgroundColor: t.surfaceAlt, borderRadius: t.radius - 2, padding: 4, gap: 4 },
   segItem: { flex: 1, minHeight: 44, paddingVertical: 6, borderRadius: t.radius - 4, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },

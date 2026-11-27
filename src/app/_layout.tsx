@@ -3,7 +3,10 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { Pressable, Text, useColorScheme, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { AppSidebar } from '@/components/AppSidebar';
+import { MacKeyboard } from '@/components/MacKeyboard';
 import { DataProvider, useData } from '@/lib/data';
+import { useShell } from '@/lib/useShell';
 import { AppErrorBoundary, BootFallback } from '@/ui/AppGuard';
 import { FeedbackProvider, useReducedMotion } from '@/ui/motion';
 import { alpha, applyScheme, theme as t, type Scheme } from '@/ui/theme';
@@ -13,6 +16,7 @@ function Root() {
   // seule la navigation est remontée (clé) — les données restent dans DataProvider, rien n'est relu ni perdu.
   const scheme: Scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
   const reduceMotion = useReducedMotion();
+  const shell = useShell();
   applyScheme(scheme);
   const { ready, loadError, writeError, dismissWriteError, retry } = useData();
   const [slow, setSlow] = useState(false);
@@ -47,18 +51,25 @@ function Root() {
           </Pressable>
         </View>
       ) : null}
-    <Stack screenOptions={{ headerTintColor: t.primary, headerStyle: { backgroundColor: alpha(t.surface, 0.94) }, headerShadowVisible: true, contentStyle: { backgroundColor: t.bg }, headerBackTitle: 'Retour', headerTitleStyle: { color: t.text, fontWeight: '700' }, animation: reduceMotion ? 'none' : 'default' }}>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="account/[id]" options={{ title: 'Compte' }} />
-      <Stack.Screen name="offer/[id]" options={{ title: 'Offre' }} />
-      <Stack.Screen name="invoice/[id]" options={{ title: 'Facture' }} />
-      <Stack.Screen name="credit/[id]" options={{ title: 'Avoir' }} />
-      <Stack.Screen name="expense/[id]" options={{ title: 'Dépense' }} />
-      <Stack.Screen name="import" options={{ title: 'Import CSV — comptes' }} />
-      <Stack.Screen name="import-vibecode" options={{ title: 'Import Vibecode (JSON)' }} />
-      <Stack.Screen name="settings" options={{ title: 'Réglages société' }} />
-      <Stack.Screen name="config" options={{ title: 'Configuration' }} />
-    </Stack>
+      <MacKeyboard>
+        <View style={{ flex: 1, flexDirection: 'row' }}>
+          {shell.sidebar ? <AppSidebar /> : null}
+          <View style={{ flex: 1 }}>
+            <Stack screenOptions={{ headerTintColor: t.primary, headerStyle: { backgroundColor: alpha(t.surface, 0.94) }, headerShadowVisible: true, contentStyle: { backgroundColor: t.bg }, headerBackTitle: 'Retour', headerTitleStyle: { color: t.text, fontWeight: '700' }, animation: reduceMotion ? 'none' : 'default' }}>
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="account/[id]" options={{ title: 'Compte' }} />
+              <Stack.Screen name="offer/[id]" options={{ title: 'Offre' }} />
+              <Stack.Screen name="invoice/[id]" options={{ title: 'Facture' }} />
+              <Stack.Screen name="credit/[id]" options={{ title: 'Avoir' }} />
+              <Stack.Screen name="expense/[id]" options={{ title: 'Dépense' }} />
+              <Stack.Screen name="import" options={{ title: 'Import CSV — comptes' }} />
+              <Stack.Screen name="import-vibecode" options={{ title: 'Import Vibecode (JSON)' }} />
+              <Stack.Screen name="settings" options={{ title: 'Réglages société' }} />
+              <Stack.Screen name="config" options={{ title: 'Configuration' }} />
+            </Stack>
+          </View>
+        </View>
+      </MacKeyboard>
     </View>
   );
 }

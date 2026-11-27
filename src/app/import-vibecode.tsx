@@ -1,5 +1,5 @@
-import * as DocumentPicker from 'expo-document-picker';
 import { useRouter } from 'expo-router';
+import { macPickBlock, pickDocuments } from '@/lib/pickFile';
 import { useState } from 'react';
 import { TextInput } from 'react-native';
 import { useData } from '@/lib/data';
@@ -31,7 +31,12 @@ export default function ImportVibecodeScreen() {
   const pick = async () => {
     setErr(''); setReport(null);
     try {
-      const r = await DocumentPicker.getDocumentAsync({ type: ['application/json', 'text/plain', '*/*'], copyToCacheDirectory: true });
+      const r = await pickDocuments({ type: ['application/json', 'text/plain', '*/*'], copyToCacheDirectory: true });
+      const blocked = macPickBlock(r);
+      if (blocked) {
+        setErr(blocked);
+        return;
+      }
       if (r.canceled || !r.assets?.[0]) return;
       const a = r.assets[0];
       let text = '';

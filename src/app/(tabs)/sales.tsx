@@ -7,7 +7,9 @@ import { chf, dateCH, todayISO } from '@/lib/format';
 import { INVOICE_STATUS, OFFER_STATUS, isOpenStatus, totals, type InvoiceStatus, type OfferStatus } from '@/lib/model';
 import { canConvertOffer } from '@/lib/offers';
 import { vatCSV } from '@/lib/vatExport';
+import { useShell } from '@/lib/useShell';
 import { Badge, Button, Card, Divider, Empty, H2, ListItem, Row, Screen, Segmented, Spacer } from '@/ui/kit';
+import { DataTable } from '@/ui/table';
 import { theme as t } from '@/ui/theme';
 
 const OT: Record<OfferStatus, 'neutral' | 'info' | 'success' | 'danger'> = { draft: 'neutral', sent: 'info', accepted: 'success', refused: 'danger', converted: 'success' };
@@ -16,10 +18,11 @@ const IT: Record<InvoiceStatus, 'neutral' | 'info' | 'success' | 'danger' | 'war
 export default function Sales() {
   const { offers, invoices, accounts, creditNotes, convertOfferToInvoice } = useData();
   const router = useRouter();
+  const shell = useShell();
   const [tab, setTab] = useState<'offers' | 'invoices'>('invoices');
   const name = (id: string) => accounts.find((a) => a.id === id)?.nom ?? 'Client supprimé';
   return (
-    <Screen>
+    <Screen spread>
       <Segmented options={[{ label: `Factures (${invoices.length})`, value: 'invoices' as const }, { label: `Offres (${offers.length})`, value: 'offers' as const }]} value={tab} onChange={setTab} />
       <Row wrap>
         {tab === 'offers' ? (
@@ -33,7 +36,29 @@ export default function Sales() {
       </Row>
       <Spacer />
       {tab === 'offers' ? (
-        offers.length ? (
+        offers.length && shell.listSpread ? (
+          <DataTable
+            headers={[
+              { label: 'Numéro', flex: 1.1 },
+              { label: 'Client', flex: 1.6 },
+              { label: 'Date', flex: 1 },
+              { label: 'Montant', flex: 1, align: 'right' },
+              { label: 'Statut', flex: 1.1 },
+            ]}
+            rows={offers.map((o) => ({
+              id: o.id,
+              label: `${o.number}, ${name(o.accountId)}`,
+              onPress: () => router.push({ pathname: '/offer/[id]', params: { id: o.id } }),
+              cells: [o.number, name(o.accountId), dateCH(o.date), chf(totals(o.lines, o.vat).ttc), <Badge key={o.id} label={OFFER_STATUS[o.status]} tone={OT[o.status]} />],
+              action: canConvertOffer(o) && (o.status === 'sent' || o.status === 'accepted') ? (
+                <Button small icon="swap-horizontal" title="Facturer" accessibilityLabel={`Convertir l’offre ${o.number} en facture`} onPress={() => {
+                  const inv = convertOfferToInvoice(o);
+                  if (inv) router.push({ pathname: '/invoice/[id]', params: { id: inv } });
+                }} />
+              ) : undefined,
+            }))}
+          />
+        ) : offers.length ? (
           <Card>
             {offers.map((o, i) => (
               <Frag key={o.id}>
@@ -51,6 +76,28 @@ export default function Sales() {
         ) : (
           <Empty icon="document-outline" title="Aucune offre" text="Créez une offre puis convertissez-la en facture." />
         )
+      ) : invoices.length && shell.listSpread ? (
+        <DataTable
+          headers={[
+            { label: 'Numéro', flex: 1.1 },
+            { label: 'Client', flex: 1.6 },
+            { label: 'Date', flex: 1 },
+            { label: 'Montant', flex: 1, align: 'right' },
+            { label: 'Statut', flex: 1.2 },
+          ]}
+          rows={invoices.map((inv) => ({
+            id: inv.id,
+            label: `${inv.number}, ${name(inv.accountId)}`,
+            onPress: () => router.push({ pathname: '/invoice/[id]', params: { id: inv.id } }),
+            cells: [
+              inv.number,
+              name(inv.accountId),
+              dateCH(inv.date),
+              chf(totals(inv.lines, inv.vat).ttc),
+              <Badge key={inv.id} label={isOpenStatus(inv.status) && inv.dueDate < todayISO() ? 'En retard' : INVOICE_STATUS[inv.status]} tone={isOpenStatus(inv.status) && inv.dueDate < todayISO() ? 'danger' : IT[inv.status]} />,
+            ],
+          }))}
+        />
       ) : invoices.length ? (
         <Card>
           {invoices.map((inv, i) => (
@@ -72,6 +119,22 @@ export default function Sales() {
         <>
           <Spacer />
           <H2>Avoirs</H2>
+          {shell.listSpread ? (
+            <DataTable
+              headers={[
+                { label: 'Numéro', flex: 1.1 },
+                { label: 'Client', flex: 1.6 },
+                { label: 'Annule', flex: 1.2 },
+                { label: 'Date', flex: 1 },
+              ]}
+              rows={creditNotes.map((c) => ({
+                id: c.id,
+                label: `${c.number}, ${name(c.accountId)}`,
+                onPress: () => router.push({ pathname: '/credit/[id]', params: { id: c.id } }),
+                cells: [c.number, name(c.accountId), c.invoiceNumber, dateCH(c.date)],
+              }))}
+            />
+          ) : (
           <Card>
             {creditNotes.map((c, i) => (
               <Frag key={c.id}>
@@ -80,6 +143,7 @@ export default function Sales() {
               </Frag>
             ))}
           </Card>
+          )}
         </>
       ) : null}
       <Spacer />

@@ -1,6 +1,7 @@
 import { Tabs, useRouter } from 'expo-router';
 import { useData } from '@/lib/data';
 import { tr } from '@/lib/i18n';
+import { useShell } from '@/lib/useShell';
 import { haptic, IconButton, Ionicons, type IconName } from '@/ui/kit';
 import { alpha, currentScheme, theme as t } from '@/ui/theme';
 import { useWindowDimensions } from 'react-native';
@@ -15,6 +16,7 @@ const icon = (name: IconName) =>
 export default function TabsLayout() {
   // Libellés d'onglets : suivent la taille de texte du système jusqu'à ×1,4, au-delà la barre déborderait.
   const { fontScale } = useWindowDimensions();
+  const shell = useShell();
   const tabFs = (n: number) => Math.round(n * Math.min(fontScale, 1.4));
   const { company } = useData();
   const router = useRouter();
@@ -25,7 +27,9 @@ export default function TabsLayout() {
       screenOptions={{
         tabBarActiveTintColor: t.primary,
         tabBarInactiveTintColor: t.muted,
-        tabBarStyle: {
+        tabBarStyle: shell.sidebar
+          ? { display: 'none', height: 0 }
+          : {
           backgroundColor: alpha(t.surface, 0.94),
           borderTopWidth: 1,
           borderTopColor: alpha(t.veil, currentScheme() === 'dark' ? 0.22 : 0.9),

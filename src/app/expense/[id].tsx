@@ -1,5 +1,5 @@
-import * as DocumentPicker from 'expo-document-picker';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import { macPickBlock, pickDocuments } from '@/lib/pickFile';
 import { useEffect, useState } from 'react';
 import { Image, Linking } from 'react-native';
 import { AmountInput } from '@/components/LinesEditor';
@@ -35,7 +35,12 @@ export default function ExpenseScreen() {
   useEffect(() => nav.setOptions({ title: existing ? 'Dépense' : 'Nouvelle dépense' }), [nav, existing]);
 
   const pick = async () => {
-    const r = await DocumentPicker.getDocumentAsync({ type: ['image/*', 'application/pdf'], copyToCacheDirectory: true, multiple: false });
+    const r = await pickDocuments({ type: ['image/*', 'application/pdf'], copyToCacheDirectory: true, multiple: false });
+    const blocked = macPickBlock(r);
+    if (blocked) {
+      setInfo(blocked);
+      return;
+    }
     if (r.canceled || !r.assets?.[0]) return;
     const a = r.assets[0];
     let inlined: string | null = null;
