@@ -1,6 +1,6 @@
-import * as DocumentPicker from 'expo-document-picker';
 import { useState } from 'react';
 import { applyBissabiImport, summarize, type ImportReport } from '@/lib/bissabiImport';
+import { macPickBlock, pickDocuments } from '@/lib/pickFile';
 import { useData } from '@/lib/data';
 import type { Company } from '@/lib/model';
 import { Button, Muted, Notice, Spacer } from './kit';
@@ -20,9 +20,14 @@ export function BissabiImportButton({ onCompany }: { onCompany?: (c: Company) =>
   const run = async () => {
     setBusy(true); setErr('');
     try {
-      const r = await DocumentPicker.getDocumentAsync({
+      const r = await pickDocuments({
         type: ['text/csv', 'text/plain', 'text/comma-separated-values', '*/*'], multiple: true, copyToCacheDirectory: true,
       });
+      const blocked = macPickBlock(r);
+      if (blocked) {
+        setErr(blocked);
+        return;
+      }
       const files = r.canceled ? [] : await Promise.all((r.assets ?? []).map(async (a) => ({
         name: a.name, text: a.file ? await a.file.text() : await (await fetch(a.uri)).text(),
       })));

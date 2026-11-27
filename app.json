@@ -15,6 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
+      "requireFullScreen": false,
       "bundleIdentifier": "com.vibecode.bissabicrmpro-h7qq2g",
       "buildNumber": "2",
       "config": {
@@ -22,6 +23,13 @@
       },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
+        "UIApplicationSupportsIndirectInputEvents": true,
+        "UISupportedInterfaceOrientations~ipad": [
+          "UIInterfaceOrientationPortrait",
+          "UIInterfaceOrientationPortraitUpsideDown",
+          "UIInterfaceOrientationLandscapeLeft",
+          "UIInterfaceOrientationLandscapeRight"
+        ],
         "CFBundleDevelopmentRegion": "fr"
       },
       "privacyManifests": {
@@ -78,7 +86,8 @@
       "lang": "fr"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      "./plugins/with-mac-ipad.js"
     ],
     "experiments": {
       "baseUrl": "/bissabi-crm-pro"

@@ -1,5 +1,5 @@
-import * as DocumentPicker from 'expo-document-picker';
 import { useLocalSearchParams } from 'expo-router';
+import { macPickBlock, pickDocuments } from '@/lib/pickFile';
 import { useEffect, useState } from 'react';
 import { Text } from 'react-native';
 import { CAMPAIGN_TEMPLATE, parseCampaignCsv } from '@/lib/telephonie/csv';
@@ -49,7 +49,12 @@ export default function CampaignDetailScreen() {
       <Row wrap>
         <Button variant="secondary" title="Modèle" onPress={() => downloadText('campagne-telephonie.csv', CAMPAIGN_TEMPLATE)} />
         <Button variant="secondary" title="Fichier" onPress={async () => {
-          const picked = await DocumentPicker.getDocumentAsync({ type: ['text/csv', 'text/plain', '*/*'], copyToCacheDirectory: true });
+          const picked = await pickDocuments({ type: ['text/csv', 'text/plain', '*/*'], copyToCacheDirectory: true });
+          const blocked = macPickBlock(picked);
+          if (blocked) {
+            setError(blocked);
+            return;
+          }
           if (picked.canceled || !picked.assets?.[0]) return;
           const asset = picked.assets[0];
           const text = asset.file ? await asset.file.text() : await (await fetch(asset.uri)).text();

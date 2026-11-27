@@ -1,5 +1,5 @@
-import * as DocumentPicker from 'expo-document-picker';
 import { useRouter } from 'expo-router';
+import { macPickBlock, pickDocuments } from '@/lib/pickFile';
 import { useState } from 'react';
 import { Text } from 'react-native';
 import { ACCOUNT_HEADERS, importAccounts, TEMPLATE_CSV, type ImportResult } from '@/lib/accountsCsv';
@@ -16,9 +16,16 @@ export default function ImportScreen() {
   const [text, setText] = useState('');
   const [res, setRes] = useState<ImportResult | null>(null);
   const [done, setDone] = useState(0);
+  const [pickMsg, setPickMsg] = useState('');
 
   const pick = async () => {
-    const r = await DocumentPicker.getDocumentAsync({ type: ['text/csv', 'text/plain', 'text/comma-separated-values', '*/*'], copyToCacheDirectory: true });
+    const r = await pickDocuments({ type: ['text/csv', 'text/plain', 'text/comma-separated-values', '*/*'], copyToCacheDirectory: true });
+    const blocked = macPickBlock(r);
+    if (blocked) {
+      setPickMsg(blocked);
+      return;
+    }
+    setPickMsg('');
     if (r.canceled || !r.assets?.[0]) return;
     const a = r.assets[0];
     const content = a.file ? await a.file.text() : await (await fetch(a.uri)).text();
@@ -50,6 +57,7 @@ export default function ImportScreen() {
         Étapes acceptées (mapping strict) : Prospect · Contacté · RDV/échantillon · Essai · Première commande · Client actif. Les lignes hors Vaud sont importées avec livraison_ok=false et l’avertissement « hors zone livraison actuelle ».
       </Muted>
       <Spacer />
+      {pickMsg ? <Notice tone="info" title="Sélecteur indisponible sur Mac" text={pickMsg} /> : null}
       <Row wrap>
         <Button icon="document-attach-outline" title="Choisir un fichier CSV" onPress={pick} />
         <Button variant="ghost" icon="download-outline" title="Modèle CSV" onPress={() => downloadText('modele-comptes-bissabi.csv', TEMPLATE_CSV)} />

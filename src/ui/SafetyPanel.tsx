@@ -1,6 +1,6 @@
-import * as DocumentPicker from 'expo-document-picker';
 import { useState } from 'react';
 import { useData } from '@/lib/data';
+import { macPickBlock, pickDocuments } from '@/lib/pickFile';
 import { confirmAsk } from '@/lib/confirm';
 import { downloadText } from '@/lib/download';
 import { dateCH, todayISO } from '@/lib/format';
@@ -45,7 +45,9 @@ export function SafetyPanel() {
     }
   };
   const pick = async (mode: 'plain' | 'encrypted') => {
-    const r = await DocumentPicker.getDocumentAsync({ type: ['application/json', 'text/plain', '*/*'], copyToCacheDirectory: true });
+    const r = await pickDocuments({ type: ['application/json', 'text/plain', '*/*'], copyToCacheDirectory: true });
+    const blocked = macPickBlock(r);
+    if (blocked) return setMsg({ tone: 'warning', title: 'Sélecteur indisponible sur Mac', text: blocked });
     if (r.canceled || !r.assets?.[0]) return;
     try {
       const text = await readAsset(r.assets[0]);

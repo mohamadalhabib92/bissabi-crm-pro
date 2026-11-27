@@ -1,9 +1,10 @@
-/** Retour haptique natif (expo-haptics). Jamais bloquant : toute erreur est ignorée. */
+/** Retour haptique natif (expo-haptics). Sur Mac : rien. Jamais bloquant. */
 import * as Haptics from 'expo-haptics';
+import { isIosAppOnMac } from '@/lib/mac';
 import { vibrationsEnabled } from './access';
 export type HapticKind = 'tap' | 'select' | 'success' | 'warning' | 'error';
 export function haptic(kind: HapticKind = 'tap') {
-  if (!vibrationsEnabled()) return;
+  if (!vibrationsEnabled() || isIosAppOnMac()) return;
   try {
     if (kind === 'select') void Haptics.selectionAsync().catch(() => {});
     else if (kind === 'tap') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});

@@ -1,17 +1,24 @@
 import type { ReactNode } from 'react';
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
+import { TextInput } from 'react-native';
 import { accountsToCSV } from '@/lib/accountsCsv';
 import { useData } from '@/lib/data';
 import { downloadText } from '@/lib/download';
 import { todayISO } from '@/lib/format';
 import { ACCOUNT_TYPES, DELIVERY_CANTON, STAGES, stageLabel, type Stage } from '@/lib/model';
+import { bindSearchFocus } from '@/lib/searchFocus';
+import { useShell } from '@/lib/useShell';
 import { Badge, Button, Card, Chip, Divider, Empty, Field, ListItem, Muted, Row, Screen, Spacer } from '@/ui/kit';
+import { DataTable } from '@/ui/table';
 
 export default function Accounts() {
   const { accounts } = useData();
   const router = useRouter();
+  const shell = useShell();
+  const searchRef = useRef<ComponentRef<typeof TextInput>>(null);
   const [q, setQ] = useState('');
+  useEffect(() => bindSearchFocus(() => searchRef.current?.focus()), []);
   const [canton, setCanton] = useState<'all' | 'VD' | 'other'>('all');
   const [type, setType] = useState<string>('all');
   const [stage, setStage] = useState<Stage | 'all'>('all');
@@ -26,14 +33,14 @@ export default function Accounts() {
     [accounts, q, canton, type, stage],
   );
   return (
-    <Screen>
+    <Screen spread>
       <Row wrap>
         <Button small icon="add" title="Nouveau compte" onPress={() => router.push({ pathname: '/account/[id]', params: { id: 'new' } })} />
         <Button small variant="secondary" icon="cloud-upload-outline" title="Importer CSV" onPress={() => router.push('/import')} />
         <Button small variant="ghost" icon="download-outline" title="Exporter" onPress={() => downloadText(`comptes-${todayISO()}.csv`, accountsToCSV(list))} />
       </Row>
       <Spacer />
-      <Field label="Rechercher" value={q} onChangeText={setQ} placeholder="Nom, ville, contact…" />
+      <Field inputRef={searchRef} label="Rechercher" value={q} onChangeText={setQ} placeholder="Nom, ville, contact…" hint={shell.keyboard ? 'Raccourci : ⌘F' : undefined} />
       <Muted>Canton</Muted>
       <Row wrap style={{ marginVertical: 6 }}>
         <Chip label="Tous" active={canton === 'all'} onPress={() => setCanton('all')} />
@@ -57,6 +64,31 @@ export default function Accounts() {
       <Muted>{list.length} compte(s) · types disponibles : {ACCOUNT_TYPES.join(', ')}</Muted>
       <Spacer h={8} />
       {list.length ? (
+        shell.listSpread ? (
+          <DataTable
+            headers={[
+              { label: 'Nom', flex: 1.8 },
+              { label: 'Ville', flex: 1.1 },
+              { label: 'Canton', flex: 0.7 },
+              { label: 'Type', flex: 1.1 },
+              { label: 'Étape', flex: 1.3 },
+              { label: 'Zone', flex: 0.9 },
+            ]}
+            rows={list.map((a) => ({
+              id: a.id,
+              label: `${a.nom}, ${a.ville || '—'}, ${stageLabel(a.etape)}`,
+              onPress: () => router.push({ pathname: '/account/[id]', params: { id: a.id } }),
+              cells: [
+                a.nom,
+                a.ville || '—',
+                a.canton,
+                a.type,
+                stageLabel(a.etape),
+                a.demo ? <Badge label="démo" tone="warning" /> : a.canton !== DELIVERY_CANTON ? <Badge label="Hors zone" tone="warning" /> : '—',
+              ],
+            }))}
+          />
+        ) : (
         <Card>
           {list.map((a, i) => (
             <ListItemWrap key={a.id} first={i === 0}>
@@ -70,6 +102,7 @@ export default function Accounts() {
             </ListItemWrap>
           ))}
         </Card>
+        )
       ) : (
         <Empty icon="business-outline" title="Aucun compte" text="Ajustez les filtres ou créez un compte." />
       )}
